@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flower Arrangement - WebGL</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.js"></script>
+    <style>
+        /* 基本リセットと文字設定 */
+        * {
+            box-sizing: border-box;
+        }
+
+        /* 全画面のグラデーション背景 */
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            color: #ffffff;
+        }
+
+        /* コントロールとキャンバスを並べるコンテナ */
+        #container {
+            display: flex;
+            gap: 30px;
+            align-items: center;
+            padding: 20px;
+            max-width: 1400px;
+        }
+
+        /* グラスモーフィズム風のコントロールパネル */
+        #controls {
+            background: rgba(20, 20, 20, 0.9);
+            backdrop-filter: blur(10px);
+            padding: 32px;
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+            min-width: 320px;
+            max-width: 320px;
+        }
+
+        h2 {
+            margin: 0 0 24px 0;
+            font-size: 24px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            background: linear-gradient(135deg, #ffffff 0%, #a0a0a0 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .section-title {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            color: #888;
+            margin: 24px 0 12px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            padding-bottom: 8px;
+        }
+
+        .section-title:first-of-type {
+            margin-top: 0;
+        }
+
+        .control-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            font-size: 14px;
+            font-weight: 400;
+            color: #e0e0e0;
+        }
+
+        .value-display {
+            font-weight: 600;
+            color: #ffffff;
+            font-size: 15px;
+            background: rgba(255, 255, 255, 0.08);
+            padding: 4px 10px;
+            border-radius: 6px;
+            min-width: 50px;
+            text-align: center;
+        }
+
+        /* カスタムスライダーのトラック */
+        input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+            outline: none;
+            cursor: pointer;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            background: #ffffff;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        }
+
+        input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+            box-shadow: 0 4px 12px rgba(255, 255, 255, 0.3);
+        }
+
+        input[type="range"]::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            background: #ffffff;
+            border: none;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        }
+
+        input[type="range"]::-moz-range-thumb:hover {
+            transform: scale(1.2);
+            box-shadow: 0 4px 12px rgba(255, 255, 255, 0.3);
+        }
+
+        /* セレクト要素の予備スタイル */
+        select {
+            width: 100%;
+            padding: 12px;
+            background: rgba(255, 255, 255, 0.05);
+            color: #ffffff;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 8px;
+            font-family: 'Inter', sans-serif;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        select:hover {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(255, 255, 255, 0.25);
+        }
+
+        select:focus {
+            outline: none;
+            border-color: #ffffff;
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        /* アクションボタン（メイン／サブ） */
+        button {
+            width: 100%;
+            padding: 14px;
+            background: #ffffff;
+            color: #000000;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-family: 'Inter', sans-serif;
+            font-size: 14px;
+            font-weight: 600;
+            margin-top: 10px;
+            transition: all 0.2s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        button:hover {
+            background: #f0f0f0;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(255, 255, 255, 0.2);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        #generate {
+            background: linear-gradient(135deg, #ffffff 0%, #e0e0e0 100%);
+            margin-top: 24px;
+        }
+
+        #save {
+            background: rgba(255, 255, 255, 0.1);
+            color: #ffffff;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        #save:hover {
+            background: rgba(255, 255, 255, 0.15);
+            border-color: rgba(255, 255, 255, 0.3);
+        }
+
+        /* キャンバスを収める角丸ラッパー */
+        #canvas-container {
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .info-text {
+            font-size: 12px;
+            color: #666;
+            margin-top: 24px;
+            padding-top: 16px;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            line-height: 1.6;
+        }
+
+        /* タブレット幅での調整 */
+        @media (max-width: 1200px) {
+            #container {
+                flex-direction: column;
+            }
+
+            #controls {
+                max-width: 100%;
+                width: 100%;
+            }
+        }
+
+        /* モバイル幅：縦並びと操作性アップ */
+        @media (max-width: 768px) {
+            body {
+                padding: 0;
+            }
+
+            #container {
+                flex-direction: column;
+                gap: 0;
+                padding: 0;
+                max-width: 100%;
+            }
+
+            #controls {
+                max-width: 100%;
+                width: 100%;
+                border-radius: 0 0 24px 24px;
+                padding: 24px 20px;
+                margin: 0;
+                order: 2; /* モバイルではコントロールを下に移動 */
+            }
+
+            #canvas-container {
+                border-radius: 0;
+                width: 100%;
+                order: 1; /* モバイルではキャンバスを先に表示 */
+                border: none;
+            }
+
+            h2 {
+                font-size: 20px;
+                margin-bottom: 20px;
+            }
+
+            .section-title {
+                font-size: 10px;
+                margin: 20px 0 10px 0;
+            }
+
+            .control-group {
+                margin-bottom: 16px;
+            }
+
+            label {
+                font-size: 13px;
+            }
+
+            .value-display {
+                font-size: 14px;
+                padding: 3px 8px;
+                min-width: 45px;
+            }
+
+            button {
+                padding: 12px;
+                font-size: 13px;
+                margin-top: 8px;
+            }
+
+            #generate {
+                margin-top: 20px;
+            }
+
+            .info-text {
+                font-size: 11px;
+                margin-top: 20px;
+                padding-top: 12px;
+            }
+
+            /* タッチ操作しやすいようスライダーを大きく */
+            input[type="range"] {
+                height: 8px;
+            }
+
+            input[type="range"]::-webkit-slider-thumb {
+                width: 22px;
+                height: 22px;
+            }
+
+            input[type="range"]::-moz-range-thumb {
+                width: 22px;
+                height: 22px;
+            }
+        }
+
+        /* とても小さい端末向け */
+        @media (max-width: 480px) {
+            #controls {
+                padding: 20px 16px;
+            }
+
+            h2 {
+                font-size: 18px;
+            }
+
+            label {
+                font-size: 12px;
+            }
+
+            .value-display {
+                font-size: 13px;
+            }
+
+            button {
+                padding: 11px;
+                font-size: 12px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- コントロールとキャンバスのラッパー -->
+    <div id="container">
+        <!-- パラメータ操作用パネル -->
+        <div id="controls">
+            <h2>Flower Arrangement</h2>
+
+            <div class="section-title">Structure</div>
+
+            <div class="control-group">
+                <label>
+                    <span>Petals</span>
+                    <span class="value-display" id="petals-val">42</span>
+                </label>
+                <input type="range" id="petals" min="10" max="80" value="42">
+            </div>
+
+            <div class="control-group">
+                <label>
+                    <span>Flower Size</span>
+                    <span class="value-display" id="center-val">90</span>
+                </label>
+                <input type="range" id="center" min="40" max="150" value="90">
+            </div>
+
+            <div class="control-group">
+                <label>
+                    <span>Triangle Ring</span>
+                    <span class="value-display" id="triangles-val">24</span>
+                </label>
+                <input type="range" id="triangles" min="8" max="48" value="24">
+            </div>
+
+            <div class="section-title">Animation</div>
+
+            <div class="control-group">
+                <label>
+                    <span>Rotation Speed</span>
+                    <span class="value-display" id="rot-val">1.0</span>
+                </label>
+                <input type="range" id="rotation" min="0" max="3" step="0.1" value="1">
+            </div>
+
+            <button id="generate">Generate New Arrangement</button>
+            <button id="save-image">Save Image</button>
+
+            <!-- 軌道操作の簡易メモ -->
+            <div class="info-text">
+                <strong>Controls:</strong><br>
+                • Drag to rotate view<br>
+                • Scroll to zoom<br>
+                • Shift + drag to pan
+            </div>
+        </div>
+        <!-- p5.js がキャンバスを挿入する場所 -->
+        <div id="canvas-container"></div>
+    </div>
+    <script src="sketch.js"></script>
+</body>
+</html>
+
