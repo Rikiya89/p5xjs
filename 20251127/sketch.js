@@ -1,188 +1,329 @@
-let attractors = [];
 let time = 0;
-let particles = [];
-let stars = [];
+let lorenzPoints = [];
+let lorenzParticles = [];
+let sphericalHarmonics = [];
+let torusKnotPoints = [];
+
+// Lorenz attractor parameters
+const lorenzParams = {
+  sigma: 10,
+  rho: 28,
+  beta: 8/3,
+  dt: 0.01,
+  scale: 8
+};
 
 function setup() {
-  createCanvas(720, 1280);
-  background(0);
+  createCanvas(720, 1280, WEBGL);
 
-  // Create multiple attractors with different parameters
-  for (let i = 0; i < 6; i++) {
-    attractors.push({
-      a: random(-2.5, 2.5),
-      b: random(-2.5, 2.5),
-      c: random(-2.5, 2.5),
-      d: random(-2.5, 2.5),
+  // Initialize Lorenz attractor particles
+  for (let i = 0; i < 3; i++) {
+    lorenzParticles.push({
       x: random(-0.1, 0.1),
       y: random(-0.1, 0.1),
-      speed: random(0.5, 1.5),
-      depth: i,
-      rotationSpeed: random(-0.0002, 0.0002)
+      z: random(-0.1, 0.1),
+      trail: [],
+      colorOffset: i * 85
     });
   }
 
-  // Create background stars
-  for (let i = 0; i < 150; i++) {
-    stars.push({
-      x: random(width),
-      y: random(height),
-      brightness: random(100, 255),
-      twinkleSpeed: random(0.01, 0.05),
-      size: random(0.5, 2)
-    });
+  // Generate spherical harmonics points
+  generateSphericalHarmonics();
+
+  // Generate torus knot
+  generateTorusKnot();
+}
+
+function generateSphericalHarmonics() {
+  sphericalHarmonics = [];
+  let resolution = 40;
+  for (let theta = 0; theta < PI; theta += PI / resolution) {
+    for (let phi = 0; phi < TWO_PI; phi += TWO_PI / resolution) {
+      sphericalHarmonics.push({ theta, phi });
+    }
   }
 }
 
-function draw() {
-  // Subtle fade for smooth trails
-  fill(0, 6);
-  noStroke();
-  rect(0, 0, width, height);
+function generateTorusKnot() {
+  torusKnotPoints = [];
+  let p = 3; // number of times around the torus
+  let q = 2; // number of loops through the hole
 
-  // Draw twinkling background stars
-  for (let star of stars) {
-    let twinkle = (sin(time * star.twinkleSpeed) + 1) / 2;
-    let alpha = star.brightness * twinkle;
-    noStroke();
-    fill(255, alpha * 0.6);
-    ellipse(star.x, star.y, star.size);
+  for (let i = 0; i < 200; i++) {
+    let t = map(i, 0, 200, 0, TWO_PI);
+    torusKnotPoints.push({ t, p, q });
   }
+}
 
-  push();
-  translate(width / 2, height / 2);
+// Lorenz attractor differential equations
+function lorenzStep(particle) {
+  let dx = lorenzParams.sigma * (particle.y - particle.x) * lorenzParams.dt;
+  let dy = (particle.x * (lorenzParams.rho - particle.z) - particle.y) * lorenzParams.dt;
+  let dz = (particle.x * particle.y - lorenzParams.beta * particle.z) * lorenzParams.dt;
 
-  // Complex multi-layered rotation
-  let rotation1 = sin(time * 0.0003) * 0.15;
-  let rotation2 = cos(time * 0.0005) * 0.1;
-  rotate(rotation1 + rotation2);
+  particle.x += dx;
+  particle.y += dy;
+  particle.z += dz;
 
-  // Pulsing scale effect with multiple waves
-  let pulse1 = 1 + sin(time * 0.001) * 0.05;
-  let pulse2 = 1 + cos(time * 0.0007) * 0.03;
-  scale(pulse1 * pulse2);
+  // Store trail
+  particle.trail.push({
+    x: particle.x * lorenzParams.scale,
+    y: particle.y * lorenzParams.scale,
+    z: particle.z * lorenzParams.scale
+  });
 
-  // Draw each attractor with depth
-  for (let att of attractors) {
+  if (particle.trail.length > 300) {
+    particle.trail.shift();
+  }
+}
+
+// Spherical harmonics function
+function sphericalHarmonic(theta, phi, m, n, t) {
+  let r = 80 + 30 * sin(m * theta + t * 0.002) * cos(n * phi + t * 0.003);
+  let x = r * sin(theta) * cos(phi);
+  let y = r * sin(theta) * sin(phi);
+  let z = r * cos(theta);
+  return { x, y, z };
+}
+
+// Torus knot parametric equation
+function torusKnotPoint(t, p, q, offset) {
+  let r = 100 + 40 * cos(q * (t + offset));
+  let x = r * cos(p * (t + offset));
+  let y = r * sin(p * (t + offset));
+  let z = -40 * sin(q * (t + offset));
+  return { x, y, z };
+}
+
+// Fibonacci sphere distribution
+function fibonacciSphere(i, n, radius) {
+  let phi = acos(1 - 2 * (i + 0.5) / n);
+  let theta = PI * (1 + sqrt(5)) * i;
+
+  let x = radius * cos(theta) * sin(phi);
+  let y = radius * sin(theta) * sin(phi);
+  let z = radius * cos(phi);
+
+  return { x, y, z };
+}
+
+function draw() {
+  background(0);
+
+  // Smooth camera rotation
+  let camX = sin(time * 0.0005) * 400;
+  let camY = cos(time * 0.0003) * 300;
+  let camZ = cos(time * 0.0005) * 400 + 200;
+  camera(camX, camY, camZ, 0, 0, 0, 0, 1, 0);
+
+  // Ambient lighting
+  ambientLight(100);
+  pointLight(255, 255, 255, 200, -200, 200);
+
+  // Draw Lorenz attractors
+  for (let particle of lorenzParticles) {
+    lorenzStep(particle);
+
+    // Draw trail with gradient
     push();
-
-    // Individual rotation for each attractor layer
-    rotate(att.rotationSpeed * time);
-
-    let iterations = 1000;
-
-    for (let i = 0; i < iterations; i++) {
-      // Clifford Attractor formula
-      let nextX = sin(att.a * att.y) + att.c * cos(att.a * att.x);
-      let nextY = sin(att.b * att.x) + att.d * cos(att.b * att.y);
-
-      att.x = nextX;
-      att.y = nextY;
-
-      // Scale and position
-      let scaleFactor = width / 5;
-      let px = att.x * scaleFactor;
-      let py = att.y * scaleFactor;
-
-      // Calculate brightness based on multiple factors
-      let distFromCenter = dist(px, py, 0, 0);
-      let maxDist = width / 2;
-
-      // Depth-based layering
-      let depthFactor = map(att.depth, 0, 5, 0.3, 1.0);
-
-      // Dynamic brightness with wave patterns
-      let timeFactor = (sin(time * 0.002 + att.depth) + 1) / 2;
-      let positionFactor = (sin(att.x * 2 + time * 0.001) + 1) / 2;
-      let waveFactor = (cos(distFromCenter * 0.05 + time * 0.003) + 1) / 2;
-      let brightness = 255 * depthFactor * timeFactor * positionFactor * (0.5 + waveFactor * 0.5);
-
-      // Distance-based alpha for depth of field
-      let alpha = map(distFromCenter, 0, maxDist, 70, 15);
-      alpha *= depthFactor;
-
-      // Draw multiple layers for enhanced glow effect
-      for (let layer = 5; layer > 0; layer--) {
-        let layerAlpha = alpha / (layer * 1.1);
-        let layerWeight = layer * 1.5;
-        let layerBright = brightness * (0.6 + (layer / 5) * 0.4);
-
-        stroke(layerBright, layerAlpha);
-        strokeWeight(layerWeight);
-        point(px, py);
-      }
-
-      // Core ultra-bright point
-      stroke(255, alpha * 2.5);
-      strokeWeight(1);
-      point(px, py);
-
-      // Enhanced connection lines with flowing patterns
-      if (i % 40 === 0 && random() > 0.65) {
-        let connectionAlpha = alpha * 0.4;
-        stroke(255, connectionAlpha);
-        strokeWeight(0.4);
-        let angle = atan2(py, px);
-        let nextAngle = angle + sin(time * 0.001) * 0.3;
-        let lineDist = random(15, 40);
-        line(px, py, px + cos(nextAngle) * lineDist, py + sin(nextAngle) * lineDist);
-      }
-
-      // Occasional energy bursts
-      if (i % 200 === 0 && random() > 0.8) {
-        noFill();
-        stroke(255, alpha * 0.3);
-        strokeWeight(0.5);
-        let radius = random(5, 15);
-        ellipse(px, py, radius, radius);
-      }
+    noFill();
+    beginShape();
+    for (let i = 0; i < particle.trail.length; i++) {
+      let p = particle.trail[i];
+      let alpha = map(i, 0, particle.trail.length, 0, 255);
+      let brightness = map(i, 0, particle.trail.length, 100, 255);
+      stroke(brightness, alpha);
+      strokeWeight(map(i, 0, particle.trail.length, 0.5, 2));
+      vertex(p.x, p.y, p.z);
     }
-
+    endShape();
     pop();
   }
 
+  // Draw spherical harmonics (morphing sphere)
+  push();
+  rotateY(time * 0.001);
+  rotateX(time * 0.0007);
+
+  noFill();
+  stroke(255, 150);
+  strokeWeight(1);
+
+  let m = floor(3 + 2 * sin(time * 0.0003));
+  let n = floor(3 + 2 * cos(time * 0.0005));
+
+  beginShape(POINTS);
+  for (let point of sphericalHarmonics) {
+    let pos = sphericalHarmonic(point.theta, point.phi, m, n, time);
+    strokeWeight(2);
+    vertex(pos.x, pos.y, pos.z);
+  }
+  endShape();
   pop();
 
-  // Add floating particles for atmosphere with varied movement
-  if (frameCount % 2 === 0 && particles.length < 120) {
-    particles.push({
-      x: random(width),
-      y: random(height),
-      vx: random(-0.8, 0.8),
-      vy: random(-0.8, 0.8),
-      life: 255,
-      size: random(1, 4),
-      pulseSpeed: random(0.02, 0.08)
-    });
+  // Draw torus knot
+  push();
+  rotateX(time * 0.0008);
+  rotateY(time * 0.0012);
+
+  stroke(255, 180);
+  strokeWeight(2);
+  noFill();
+
+  beginShape();
+  for (let point of torusKnotPoints) {
+    let pos = torusKnotPoint(point.t, point.p, point.q, time * 0.001);
+    vertex(pos.x, pos.y, pos.z);
   }
+  endShape();
 
-  // Update and draw particles with pulsing effect
-  for (let i = particles.length - 1; i >= 0; i--) {
-    let p = particles[i];
+  // Draw connecting tube
+  stroke(255, 80);
+  strokeWeight(1);
+  beginShape();
+  for (let point of torusKnotPoints) {
+    let pos = torusKnotPoint(point.t, point.p, point.q, time * 0.001 + PI);
+    vertex(pos.x, pos.y, pos.z);
+  }
+  endShape();
+  pop();
 
-    // Flowing movement with sine wave
-    p.x += p.vx + sin(time * 0.01 + p.y * 0.01) * 0.3;
-    p.y += p.vy + cos(time * 0.01 + p.x * 0.01) * 0.3;
-    p.life -= 0.8;
+  // Draw Fibonacci sphere
+  push();
+  rotateY(time * 0.0006);
 
-    if (p.life <= 0 || p.x < -20 || p.x > width + 20 || p.y < -20 || p.y > height + 20) {
-      particles.splice(i, 1);
-    } else {
-      // Pulsing brightness
-      let pulse = (sin(time * p.pulseSpeed) + 1) / 2;
-      let particleAlpha = (p.life / 255) * (0.6 + pulse * 0.4);
+  let fibCount = 100;
+  for (let i = 0; i < fibCount; i++) {
+    let radius = 150 + 20 * sin(time * 0.001 + i * 0.1);
+    let pos = fibonacciSphere(i, fibCount, radius);
 
-      // Draw glow around particle
-      noStroke();
-      fill(255, particleAlpha * 0.3 * 255);
-      ellipse(p.x, p.y, p.size * 3);
+    push();
+    translate(pos.x, pos.y, pos.z);
 
-      // Draw core particle
-      fill(255, particleAlpha * 255);
-      ellipse(p.x, p.y, p.size);
+    let size = 3 + 2 * sin(time * 0.01 + i);
+    noStroke();
+    fill(255, 200);
+    sphere(size);
+    pop();
+  }
+  pop();
+
+  // Draw rotating platonic solid wireframes
+  push();
+  rotateX(time * 0.0015);
+  rotateY(time * 0.001);
+  rotateZ(time * 0.0008);
+
+  // Dodecahedron approximation with icosahedron
+  noFill();
+  stroke(255, 120);
+  strokeWeight(1.5);
+
+  let icoRadius = 180;
+  drawIcosahedron(icoRadius);
+  pop();
+
+  // Draw parametric wave surface
+  push();
+  rotateX(PI / 4);
+  translate(0, 0, -100);
+
+  stroke(255, 100);
+  strokeWeight(1);
+  noFill();
+
+  let waveRes = 20;
+  for (let i = 0; i < waveRes; i++) {
+    beginShape();
+    for (let j = 0; j < waveRes; j++) {
+      let u = map(i, 0, waveRes, -PI, PI);
+      let v = map(j, 0, waveRes, -PI, PI);
+
+      let x = u * 40;
+      let y = v * 40;
+      let z = 30 * sin(u + time * 0.002) * cos(v + time * 0.003);
+
+      vertex(x, y, z);
     }
+    endShape();
+  }
+  pop();
+
+  // Draw golden spiral particles
+  push();
+  rotateY(time * 0.0004);
+
+  let spiralPoints = 50;
+  let goldenAngle = PI * (3 - sqrt(5)); // Golden angle
+
+  for (let i = 0; i < spiralPoints; i++) {
+    let theta = i * goldenAngle;
+    let r = 15 * sqrt(i);
+    let z = map(i, 0, spiralPoints, -200, 200);
+
+    let x = r * cos(theta + time * 0.001);
+    let y = r * sin(theta + time * 0.001);
+
+    push();
+    translate(x, y, z);
+    noStroke();
+    fill(255, 180);
+    let size = map(i, 0, spiralPoints, 6, 2);
+    sphere(size);
+    pop();
+  }
+  pop();
+
+  // Draw nested rotating rings (Borromean rings inspired)
+  for (let i = 0; i < 3; i++) {
+    push();
+
+    if (i === 0) {
+      rotateX(time * 0.001);
+    } else if (i === 1) {
+      rotateY(time * 0.001);
+    } else {
+      rotateZ(time * 0.001);
+    }
+
+    noFill();
+    stroke(255, 100);
+    strokeWeight(2);
+
+    let ringRadius = 120 + i * 20;
+    torus(ringRadius, 8, 32, 16);
+    pop();
   }
 
   time++;
 }
 
+// Helper function to draw icosahedron
+function drawIcosahedron(r) {
+  let phi = (1 + sqrt(5)) / 2; // Golden ratio
+
+  let vertices = [
+    [-1, phi, 0], [1, phi, 0], [-1, -phi, 0], [1, -phi, 0],
+    [0, -1, phi], [0, 1, phi], [0, -1, -phi], [0, 1, -phi],
+    [phi, 0, -1], [phi, 0, 1], [-phi, 0, -1], [-phi, 0, 1]
+  ];
+
+  // Normalize and scale vertices
+  for (let i = 0; i < vertices.length; i++) {
+    let len = sqrt(vertices[i][0]**2 + vertices[i][1]**2 + vertices[i][2]**2);
+    vertices[i] = vertices[i].map(v => (v / len) * r);
+  }
+
+  // Draw edges
+  let edges = [
+    [0,11],[0,5],[0,1],[0,7],[0,10],[1,5],[5,11],[11,10],[10,7],[7,1],
+    [3,9],[3,4],[3,2],[3,6],[3,8],[4,9],[9,8],[8,6],[6,2],[2,4],
+    [1,9],[5,4],[11,2],[10,6],[7,8]
+  ];
+
+  for (let edge of edges) {
+    let v1 = vertices[edge[0]];
+    let v2 = vertices[edge[1]];
+    line(v1[0], v1[1], v1[2], v2[0], v2[1], v2[2]);
+  }
+}
