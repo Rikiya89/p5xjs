@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D Generative Art - p5.js v2</title>
+    <title>Monochrome Dreams - 3D Generative Art</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/2.0.3/p5.js"></script>
     <style>
         body {
@@ -13,11 +13,15 @@
             justify-content: center;
             align-items: center;
             min-height: 100vh;
-            background-color: #0a0a0a;
+            background: #0a0a0a;
+            background-attachment: fixed;
         }
         canvas {
             display: block;
-            box-shadow: 0 0 50px rgba(255, 255, 255, 0.1);
+            box-shadow: 0 0 100px rgba(255, 255, 255, 0.15),
+                        0 0 150px rgba(255, 255, 255, 0.08),
+                        0 0 200px rgba(255, 255, 255, 0.04);
+            border-radius: 4px;
         }
     </style>
 </head>
