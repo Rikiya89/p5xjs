@@ -5,10 +5,13 @@ let colors = [];
 let manifolds = [];
 let geodesics = [];
 let particles = [];
+let starField = [];
 let time = 0;
 
 function setup() {
   createCanvas(720, 1280, WEBGL);
+  smooth();
+  frameRate(30);
 
   // Color palette
   colors = [
@@ -24,18 +27,30 @@ function setup() {
     color('#283631')
   ];
 
-  // Initialize manifold layers
-  for (let i = 0; i < 5; i++) {
+  // Initialize starfield background (optimized)
+  for (let i = 0; i < 100; i++) {
+    starField.push({
+      x: random(-width, width),
+      y: random(-height, height),
+      z: random(-500, 500),
+      brightness: random(100, 255),
+      size: random(0.5, 2),
+      twinkleSpeed: random(0.02, 0.05)
+    });
+  }
+
+  // Initialize manifold layers (optimized)
+  for (let i = 0; i < 4; i++) {
     manifolds.push(new RiemannianManifold(i));
   }
 
-  // Initialize geodesic curves
-  for (let i = 0; i < 12; i++) {
+  // Initialize geodesic curves (optimized)
+  for (let i = 0; i < 10; i++) {
     geodesics.push(new Geodesic(i));
   }
 
-  // Initialize particles for parallel transport visualization
-  for (let i = 0; i < 80; i++) {
+  // Initialize particles for parallel transport visualization (optimized)
+  for (let i = 0; i < 60; i++) {
     particles.push(new TransportParticle());
   }
 }
@@ -43,18 +58,51 @@ function setup() {
 function draw() {
   background(colors[8]);
 
-  // Camera movement
-  let camX = sin(time * 0.1) * 200;
-  let camY = cos(time * 0.08) * 150;
-  let camZ = 600 + sin(time * 0.05) * 100;
+  // Draw starfield for depth
+  drawStarField();
+
+  // Smooth camera movement with easing
+  let camX = sin(time * 0.08) * 220 + cos(time * 0.05) * 50;
+  let camY = cos(time * 0.06) * 180 + sin(time * 0.09) * 30;
+  let camZ = 550 + sin(time * 0.04) * 120 + cos(time * 0.07) * 40;
   camera(camX, camY, camZ, 0, 0, 0, 0, 1, 0);
 
-  // Ambient lighting
-  ambientLight(60, 60, 80);
-  directionalLight(150, 140, 180, -1, 1, -1);
-  pointLight(colors[5], 200, -200, 300);
+  // Enhanced lighting system
+  ambientLight(50, 50, 70);
 
-  // Draw manifolds (curved surfaces)
+  // Main directional light
+  directionalLight(180, 170, 210, -0.8, 0.8, -1);
+
+  // Accent lights with animation
+  let lightAngle1 = time * 0.3;
+  pointLight(
+    red(colors[5]) * 0.8,
+    green(colors[5]) * 0.8,
+    blue(colors[5]) * 0.8,
+    cos(lightAngle1) * 300,
+    sin(lightAngle1) * 300,
+    200
+  );
+
+  let lightAngle2 = time * 0.25 + PI;
+  pointLight(
+    red(colors[2]) * 0.6,
+    green(colors[2]) * 0.6,
+    blue(colors[2]) * 0.6,
+    cos(lightAngle2) * 250,
+    sin(lightAngle2) * 250,
+    -150
+  );
+
+  // Subtle rim light
+  pointLight(
+    red(colors[6]) * 0.4,
+    green(colors[6]) * 0.4,
+    blue(colors[6]) * 0.4,
+    0, -400, 100
+  );
+
+  // Draw manifolds (curved surfaces) with depth sorting
   push();
   for (let manifold of manifolds) {
     manifold.update(time);
@@ -70,7 +118,7 @@ function draw() {
   }
   pop();
 
-  // Draw transport particles
+  // Draw transport particles with trails
   push();
   for (let particle of particles) {
     particle.update(time);
@@ -82,6 +130,23 @@ function draw() {
   drawCurvatureTensor();
 
   time += 0.01;
+}
+
+// Starfield background for depth (optimized)
+function drawStarField() {
+  push();
+  for (let star of starField) {
+    let twinkle = sin(time * star.twinkleSpeed * TWO_PI) * 0.3 + 0.7;
+    let brightness = star.brightness * twinkle;
+
+    // Brighter stars get larger points
+    let pointSize = star.brightness > 200 ? star.size * 1.5 : star.size;
+
+    stroke(brightness, brightness, brightness + 30, 180);
+    strokeWeight(pointSize);
+    point(star.x, star.y, star.z);
+  }
+  pop();
 }
 
 // Riemannian Manifold class - curved surface representation
@@ -107,52 +172,86 @@ class RiemannianManifold {
 
     noFill();
     let c = colors[this.colorIndex];
-    stroke(red(c), green(c), blue(c), 80);
-    strokeWeight(0.8);
 
-    // Draw curved surface using parametric equations
-    let segments = 40;
-    for (let u = 0; u < segments; u++) {
+    // Draw curved surface with depth-based opacity (optimized segments)
+    let segments = 30;
+    for (let u = 0; u < segments; u += 1) {
       beginShape();
       for (let v = 0; v <= segments; v++) {
         let theta = map(u, 0, segments, 0, TWO_PI);
         let phi = map(v, 0, segments, -PI / 2, PI / 2);
 
-        // Riemannian metric deformation
-        let curveFactor = 1 + 0.3 * sin(theta * 3 + this.phase) * cos(phi * 2);
+        // Riemannian metric deformation with smoother curves
+        let curveFactor = 1 + 0.35 * sin(theta * 3 + this.phase) * cos(phi * 2);
         let r = this.baseRadius * curveFactor;
 
-        // Gaussian curvature visualization
-        let gaussianCurve = sin(theta * 2 + phi * 3 + this.phase * 2) * 20;
+        // Enhanced Gaussian curvature visualization
+        let gaussianCurve = sin(theta * 2 + phi * 3 + this.phase * 2) * 15;
+        gaussianCurve += cos(theta * 4 - phi * 2 + this.phase) * 8;
 
         let x = r * cos(phi) * cos(theta) + gaussianCurve * sin(this.phase);
         let y = r * cos(phi) * sin(theta) + gaussianCurve * cos(this.phase);
         let z = r * sin(phi) * this.curvature;
+
+        // Depth-based opacity
+        let distFromCamera = dist(0, 0, 0, x, y, z);
+        let alpha = map(distFromCamera, 0, 600, 100, 40);
+
+        stroke(red(c), green(c), blue(c), alpha);
+        strokeWeight(0.7);
 
         vertex(x, y, z);
       }
       endShape();
     }
 
-    // Meridian lines
-    for (let v = 0; v < segments; v++) {
+    // Meridian lines with enhanced detail (optimized)
+    for (let v = 0; v < segments; v += 3) {
       beginShape();
       for (let u = 0; u <= segments; u++) {
         let theta = map(u, 0, segments, 0, TWO_PI);
         let phi = map(v, 0, segments, -PI / 2, PI / 2);
 
-        let curveFactor = 1 + 0.3 * sin(theta * 3 + this.phase) * cos(phi * 2);
+        let curveFactor = 1 + 0.35 * sin(theta * 3 + this.phase) * cos(phi * 2);
         let r = this.baseRadius * curveFactor;
-        let gaussianCurve = sin(theta * 2 + phi * 3 + this.phase * 2) * 20;
+        let gaussianCurve = sin(theta * 2 + phi * 3 + this.phase * 2) * 15;
+        gaussianCurve += cos(theta * 4 - phi * 2 + this.phase) * 8;
 
         let x = r * cos(phi) * cos(theta) + gaussianCurve * sin(this.phase);
         let y = r * cos(phi) * sin(theta) + gaussianCurve * cos(this.phase);
         let z = r * sin(phi) * this.curvature;
 
+        let distFromCamera = dist(0, 0, 0, x, y, z);
+        let alpha = map(distFromCamera, 0, 600, 90, 35);
+
+        stroke(red(c), green(c), blue(c), alpha);
+        strokeWeight(0.6);
+
         vertex(x, y, z);
       }
       endShape();
     }
+
+    // Add highlight rings at specific latitudes (optimized)
+    for (let phi of [0, PI/3]) {
+      beginShape();
+      for (let theta = 0; theta <= TWO_PI; theta += 0.1) {
+        let curveFactor = 1 + 0.35 * sin(theta * 3 + this.phase) * cos(phi * 2);
+        let r = this.baseRadius * curveFactor;
+        let gaussianCurve = sin(theta * 2 + phi * 3 + this.phase * 2) * 15;
+        gaussianCurve += cos(theta * 4 - phi * 2 + this.phase) * 8;
+
+        let x = r * cos(phi) * cos(theta) + gaussianCurve * sin(this.phase);
+        let y = r * cos(phi) * sin(theta) + gaussianCurve * cos(this.phase);
+        let z = r * sin(phi) * this.curvature;
+
+        stroke(red(c) * 1.3, green(c) * 1.3, blue(c) * 1.3, 120);
+        strokeWeight(1.2);
+        vertex(x, y, z);
+      }
+      endShape(CLOSE);
+    }
+
     pop();
   }
 }
@@ -174,7 +273,7 @@ class Geodesic {
 
   generatePath() {
     this.points = [];
-    let numPoints = 100;
+    let numPoints = 60;
 
     for (let i = 0; i < numPoints; i++) {
       let t = map(i, 0, numPoints, 0, TWO_PI * 2);
@@ -207,25 +306,45 @@ class Geodesic {
     rotateX(this.currentPhase * 0.1);
 
     let c = colors[this.colorIndex];
-    stroke(red(c), green(c), blue(c), 150);
-    strokeWeight(1.5);
-    noFill();
 
-    beginShape();
-    for (let p of this.points) {
-      vertex(p.x, p.y, p.z);
+    // Draw main geodesic with gradient effect
+    for (let i = 0; i < this.points.length - 1; i++) {
+      let p1 = this.points[i];
+      let p2 = this.points[i + 1];
+
+      // Distance-based alpha for depth effect
+      let dist1 = dist(0, 0, 0, p1.x, p1.y, p1.z);
+      let alpha = map(dist1, 0, 500, 180, 60);
+
+      // Color variation along the curve
+      let colorShift = sin(i * 0.1 + this.currentPhase) * 20;
+
+      stroke(
+        red(c) + colorShift,
+        green(c) + colorShift,
+        blue(c) + colorShift,
+        alpha
+      );
+      strokeWeight(1.8);
+      line(p1.x, p1.y, p1.z, p2.x, p2.y, p2.z);
     }
-    endShape();
 
-    // Highlight points along geodesic
+    // Animated highlight points along geodesic (optimized)
     let highlightIndex = floor((this.currentPhase * 10) % this.points.length);
     let hp = this.points[highlightIndex];
 
     push();
     translate(hp.x, hp.y, hp.z);
-    fill(colors[4]);
+
+    // Glowing sphere (optimized)
+    fill(red(colors[4]) * 1.3, green(colors[4]) * 1.3, blue(colors[4]) * 1.3, 220);
     noStroke();
     sphere(5);
+
+    // Outer glow
+    fill(red(colors[4]), green(colors[4]), blue(colors[4]), 80);
+    sphere(8);
+
     pop();
 
     pop();
@@ -270,18 +389,31 @@ class TransportParticle {
     push();
     translate(x, y, z);
 
-    // Draw particle
+    // Draw particle with glow layers (optimized)
     let c = colors[this.colorIndex];
-    fill(red(c), green(c), blue(c), 200);
     noStroke();
+
+    // Outer glow
+    fill(red(c), green(c), blue(c), 50);
+    sphere(this.size * 2);
+
+    // Core particle
+    fill(red(c) * 1.3, green(c) * 1.3, blue(c) * 1.3, 220);
     sphere(this.size);
 
-    // Draw transport vector (shows how vectors rotate during parallel transport)
-    stroke(colors[5]);
-    strokeWeight(1);
-    let vecLen = 15;
+    // Enhanced transport vector (optimized)
+    let vecLen = 18;
     let vx = vecLen * cos(this.transportAngle);
     let vy = vecLen * sin(this.transportAngle);
+
+    // Vector with glow
+    strokeWeight(2.5);
+    stroke(red(colors[5]) * 0.9, green(colors[5]) * 0.9, blue(colors[5]) * 0.9, 80);
+    line(0, 0, 0, vx, vy, 0);
+
+    // Vector core
+    strokeWeight(1.2);
+    stroke(red(colors[5]) * 1.2, green(colors[5]) * 1.2, blue(colors[5]) * 1.2, 200);
     line(0, 0, 0, vx, vy, 0);
 
     pop();
@@ -300,14 +432,16 @@ function drawCurvatureTensor() {
     rotateZ(time * 0.1);
 
     let c = colors[i % colors.length];
-    stroke(red(c), green(c), blue(c), 120);
-    strokeWeight(2);
     noFill();
 
-    // Tensor component rings
+    // Enhanced tensor component rings with glow
     let ringRadius = 60 + i * 15;
+
+    // Outer glow (optimized)
+    stroke(red(c), green(c), blue(c), 40);
+    strokeWeight(4);
     beginShape();
-    for (let a = 0; a <= TWO_PI; a += 0.1) {
+    for (let a = 0; a <= TWO_PI; a += 0.12) {
       let wobble = sin(a * 4 + time * 2) * 10;
       let x = (ringRadius + wobble) * cos(a);
       let y = (ringRadius + wobble) * sin(a);
@@ -315,6 +449,20 @@ function drawCurvatureTensor() {
       vertex(x, y, z);
     }
     endShape(CLOSE);
+
+    // Core ring (optimized)
+    stroke(red(c) * 1.2, green(c) * 1.2, blue(c) * 1.2, 160);
+    strokeWeight(2);
+    beginShape();
+    for (let a = 0; a <= TWO_PI; a += 0.12) {
+      let wobble = sin(a * 4 + time * 2) * 10;
+      let x = (ringRadius + wobble) * cos(a);
+      let y = (ringRadius + wobble) * sin(a);
+      let z = sin(a * 3 + time) * 20;
+      vertex(x, y, z);
+    }
+    endShape(CLOSE);
+
     pop();
   }
 
@@ -325,10 +473,8 @@ function drawCurvatureTensor() {
     rotateY(time * 0.15);
 
     let c = colors[(j + 5) % colors.length];
-    stroke(red(c), green(c), blue(c), 100);
-    strokeWeight(1);
 
-    // Connection lines
+    // Connection lines with glow
     for (let k = 0; k < 8; k++) {
       let angle = k * PI / 4 + time * 0.5;
       let r = 40 + sin(time + k) * 15;
@@ -336,24 +482,38 @@ function drawCurvatureTensor() {
       let y1 = r * sin(angle);
       let x2 = (r + 30) * cos(angle + 0.3);
       let y2 = (r + 30) * sin(angle + 0.3);
+
+      // Outer glow
+      strokeWeight(2.5);
+      stroke(red(c), green(c), blue(c), 50);
+      line(x1, y1, 0, x2, y2, 10);
+
+      // Core line
+      strokeWeight(1);
+      stroke(red(c) * 1.3, green(c) * 1.3, blue(c) * 1.3, 130);
       line(x1, y1, 0, x2, y2, 10);
     }
     pop();
   }
 
-  // Central glowing sphere - metric tensor
+  // Central glowing sphere - metric tensor (optimized)
   push();
-  let pulseSize = 25 + sin(time * 2) * 5;
+  let pulseSize = 28 + sin(time * 2) * 6;
 
-  // Inner glow
+  // Outer glow layers (optimized)
   for (let layer = 0; layer < 3; layer++) {
-    let layerSize = pulseSize + layer * 8;
-    let alpha = 80 - layer * 20;
+    let layerSize = pulseSize + layer * 12;
+    let alpha = 120 - layer * 30;
     let c = colors[2];
     fill(red(c), green(c), blue(c), alpha);
     noStroke();
     sphere(layerSize);
   }
+
+  // Bright core
+  fill(red(colors[3]) * 1.5, green(colors[3]) * 1.5, blue(colors[3]) * 1.5, 200);
+  sphere(pulseSize * 0.6);
+
   pop();
 
   pop();
