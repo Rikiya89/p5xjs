@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thank You 2025 - 3D Generative Art</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #000000;
+            overflow: hidden;
+        }
+        #canvas-container {
+            position: relative;
+            width: 720px;
+            height: 1280px;
+        }
+        #main-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        #text-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas-container">
+        <div id="main-canvas"></div>
+        <div id="text-canvas"></div>
+    </div>
+    <script src="sketch.js"></script>
+</body>
+</html>
