@@ -111,7 +111,7 @@ function draw() {
   drawCoreConstellation();
   drawBloomParticles();
   
-  time += 0.014;
+  time += 0.060;
 }
 
 function drawCore() {

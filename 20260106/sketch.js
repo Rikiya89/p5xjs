@@ -40,8 +40,8 @@ function setup() {
 }
 
 function draw() {
-  // Fade effect for trails
-  background(0);
+  // Deep black background with subtle fade
+  background(0, 0, 0);
 
   // Dynamic camera with breathing motion
   let camX = sin(time * 0.15) * 250;
@@ -49,12 +49,14 @@ function draw() {
   let camZ = 600 + sin(time * 0.08) * 150;
   camera(camX, camY, camZ, 0, 0, 0, 0, 1, 0);
 
-  // Enhanced lighting with pulsing
+  // Enhanced white lighting with pulsing
   let pulse = sin(time * 2) * 0.3 + 0.7;
-  ambientLight(30 * pulse);
+  ambientLight(35 * pulse);
+
+  // Multiple white lights for depth
   pointLight(255, 255, 255, 300 * cos(time), -200, 300);
-  pointLight(200, 200, 200, -300, 300 * sin(time * 0.7), -200);
-  pointLight(150, 150, 150, 0, 400, 200 * sin(time * 0.5));
+  pointLight(220, 220, 230, -300, 300 * sin(time * 0.7), -200);
+  pointLight(180, 180, 200, 0, 400, 200 * sin(time * 0.5));
 
   // Background star field
   drawStarField();
@@ -102,10 +104,11 @@ class DeMoivreParticle {
     this.speed = random(0.3, 1.5);
     this.offset = random(TWO_PI);
     this.size = random(1.5, 5);
-    this.opacity = random(120, 255);
+    this.opacity = random(180, 255);
     this.trail = [];
     this.trailLength = 15;
     this.phase = random(TWO_PI);
+    this.brightness = random(200, 255);
   }
 
   update() {
@@ -134,30 +137,32 @@ class DeMoivreParticle {
   }
 
   display() {
-    // Draw trail
+    // Draw trail with elegant fade
     push();
     noFill();
     beginShape();
     for (let i = 0; i < this.trail.length; i++) {
       let p = this.trail[i];
-      let alpha = map(i, 0, this.trail.length, 0, this.opacity * 0.6);
-      stroke(255, alpha);
-      strokeWeight(map(i, 0, this.trail.length, 0.5, 2));
+      let alpha = map(i, 0, this.trail.length, 0, this.opacity * 0.7);
+      stroke(this.brightness, alpha);
+      strokeWeight(map(i, 0, this.trail.length, 0.5, 2.5));
       vertex(p.x, p.y, p.z);
     }
     endShape();
     pop();
 
-    // Draw particle
+    // Draw particle with bright white
     push();
     translate(this.x, this.y, this.z);
     noStroke();
-    fill(255, this.opacity);
+    fill(this.brightness, this.opacity);
     sphere(this.size);
 
-    // Glow effect
-    fill(255, this.opacity * 0.3);
+    // Enhanced glow effect
+    fill(this.brightness * 0.9, this.opacity * 0.5);
     sphere(this.size * 2);
+    fill(this.brightness * 0.7, this.opacity * 0.2);
+    sphere(this.size * 3);
     pop();
   }
 }
@@ -171,6 +176,7 @@ class ComplexSpiral {
     this.rotationSpeed = 0.08 + index * 0.03;
     this.baseAngle = (index / numSpirals) * TWO_PI;
     this.phase = random(TWO_PI);
+    this.brightness = 200 + index * 5;
   }
 
   update() {
@@ -198,10 +204,10 @@ class ComplexSpiral {
   display() {
     push();
 
-    // Draw smooth curves
+    // Draw smooth curves with elegant white
     noFill();
-    stroke(255, 180);
-    strokeWeight(1.5);
+    stroke(this.brightness, 200);
+    strokeWeight(2);
     beginShape();
     for (let p of this.points) {
       vertex(p.x, p.y, p.z);
@@ -215,8 +221,13 @@ class ComplexSpiral {
       push();
       translate(p.x, p.y, p.z);
       noStroke();
-      fill(255, 220);
+      fill(this.brightness, 240);
       sphere(size);
+      // Multi-layer glow
+      fill(this.brightness * 0.9, 120);
+      sphere(size * 1.8);
+      fill(this.brightness * 0.7, 60);
+      sphere(size * 2.5);
       pop();
     }
     pop();
@@ -229,9 +240,10 @@ class DeMoivreRing {
     this.power = 3 + index;
     this.radius = 100 + index * 40;
     this.points = 80;
-    this.thickness = random(1, 3);
+    this.thickness = random(2, 4);
     this.speed = random(0.1, 0.3);
     this.offset = random(TWO_PI);
+    this.brightness = 180 + index * 10;
   }
 
   update() {
@@ -244,7 +256,7 @@ class DeMoivreRing {
     rotateZ(time * this.speed);
 
     noFill();
-    stroke(255, 100);
+    stroke(this.brightness, 160);
     strokeWeight(this.thickness);
 
     beginShape();
@@ -258,6 +270,10 @@ class DeMoivreRing {
       let x = r * cos(angle) / this.power;
       let y = r * sin(angle) / this.power;
       let z = sin(theta * 3 + this.currentTime) * 20;
+
+      // Subtle brightness variation
+      let segmentBrightness = this.brightness + sin(i * 0.1 + time) * 30;
+      stroke(segmentBrightness, 180);
 
       vertex(x, y, z);
     }
@@ -275,6 +291,7 @@ class OrbitalParticle {
     this.speed = random(0.5, 1.2);
     this.offset = random(TWO_PI);
     this.size = random(2, 4);
+    this.brightness = random(180, 255);
   }
 
   update() {
@@ -293,15 +310,19 @@ class OrbitalParticle {
     push();
     translate(this.x, this.y, this.z);
     noStroke();
-    fill(255, 180);
+    fill(this.brightness, 220);
     sphere(this.size);
+    // Multi-layer glow
+    fill(this.brightness * 0.9, 110);
+    sphere(this.size * 1.6);
+    fill(this.brightness * 0.7, 50);
+    sphere(this.size * 2.2);
     pop();
   }
 }
 
 function drawConnections() {
-  stroke(255, 30);
-  strokeWeight(0.5);
+  strokeWeight(0.8);
 
   for (let i = 0; i < particles.length; i++) {
     let p1 = particles[i];
@@ -312,8 +333,9 @@ function drawConnections() {
       let d = dist(p1.x, p1.y, p1.z, p2.x, p2.y, p2.z);
 
       if (d < 60) {
-        let alpha = map(d, 0, 60, 50, 0);
-        stroke(255, alpha);
+        let alpha = map(d, 0, 60, 60, 0);
+        let connBrightness = (p1.brightness + p2.brightness) / 2;
+        stroke(connBrightness, alpha);
         line(p1.x, p1.y, p1.z, p2.x, p2.y, p2.z);
         connections++;
       }
@@ -335,9 +357,10 @@ function drawStarField() {
     push();
     translate(x, y, z);
     noStroke();
-    let brightness = random(100, 255);
-    fill(brightness, brightness * 0.4);
-    sphere(random(0.5, 2));
+    let starBrightness = random(150, 255);
+    let starAlpha = random(100, 200);
+    fill(starBrightness, starAlpha);
+    sphere(random(0.5, 2.5));
     pop();
   }
   pop();
@@ -354,8 +377,9 @@ function drawCentralStructure() {
     rotateZ(time * (0.25 + layer * 0.08));
 
     noFill();
-    stroke(255, 120 - layer * 20);
-    strokeWeight(1);
+    let baseBrightness = 200 - layer * 30;
+    stroke(baseBrightness, 190 - layer * 30);
+    strokeWeight(2.5);
 
     let sides = 6 + layer * 2;
     let radius = 40 + layer * 25;
@@ -370,6 +394,10 @@ function drawCentralStructure() {
       let x = r * cos(angle) / n;
       let y = r * sin(angle) / n;
       let z = sin(i + time * 2) * 10;
+
+      // Subtle brightness variation
+      let vertexBrightness = baseBrightness + sin(i + time * 3) * 40;
+      stroke(vertexBrightness, 200);
 
       vertex(x, y, z);
     }
@@ -390,9 +418,10 @@ function drawDeMoivreFlower() {
     rotateY(cos(time * 0.25) * 0.3);
 
     noFill();
-    let alpha = map(n, 2, 8, 180, 80);
-    stroke(255, alpha);
-    strokeWeight(map(n, 2, 8, 2, 0.8));
+    let brightness = map(n, 2, 8, 240, 160);
+    let alpha = map(n, 2, 8, 200, 120);
+    stroke(brightness, alpha);
+    strokeWeight(map(n, 2, 8, 3, 1.2));
 
     beginShape();
     for (let i = 0; i <= 360; i += 1) {
@@ -407,20 +436,28 @@ function drawDeMoivreFlower() {
       let y = r * sin(angle);
       let z = 15 * sin(n * theta + time) * cos(theta * 2);
 
+      // Subtle brightness modulation along petals
+      let petalBrightness = brightness + sin(i * 0.05 + time * 2) * 40;
+      stroke(petalBrightness, alpha);
+
       vertex(x, y, z);
     }
     endShape(CLOSE);
     pop();
   }
 
-  // Pulsing center
+  // Pulsing center with white glow
   push();
   let centerPulse = sin(time * 3) * 0.3 + 1;
   noStroke();
-  fill(255);
+  fill(255, 255);
   sphere(10 * centerPulse);
-  fill(255, 100);
+  fill(240, 180);
   sphere(15 * centerPulse);
+  fill(220, 100);
+  sphere(20 * centerPulse);
+  fill(200, 50);
+  sphere(25 * centerPulse);
   pop();
 
   pop();
@@ -437,8 +474,9 @@ function drawGeometricCore() {
     let r = i * 30;
 
     noFill();
-    stroke(255, 150 - i * 30);
-    strokeWeight(1.5);
+    let coreBrightness = 220 - i * 30;
+    stroke(coreBrightness, 200 - i * 40);
+    strokeWeight(2.5);
 
     // Create vertices using De Moivre's theorem
     let vertices = [];
@@ -451,10 +489,12 @@ function drawGeometricCore() {
       vertices.push(createVector(x, y, z));
     }
 
-    // Connect vertices
+    // Connect vertices with subtle brightness variation
     for (let j = 0; j < vertices.length; j++) {
       let v1 = vertices[j];
       let v2 = vertices[(j + 1) % vertices.length];
+      let edgeBrightness = coreBrightness + sin(j + time * 3) * 30;
+      stroke(edgeBrightness, 210);
       line(v1.x, v1.y, v1.z, v2.x, v2.y, v2.z);
     }
   }
