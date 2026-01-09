@@ -1,17 +1,3 @@
-// Color palette
-const colors = [
-  '#362d78',
-  '#523fa3',
-  '#916ccc',
-  '#bda1e5',
-  '#c8c0e9',
-  '#84bae7',
-  '#516ad4',
-  '#333f87',
-  '#293039',
-  '#283631'
-];
-
 let particles = [];
 let connections = [];
 let helixParticles = [];
@@ -312,7 +298,7 @@ function drawBloomParticles() {
 
     // Enhanced multi-layer glow
     for (let g = 2; g > 0; g--) {
-      push();
+      push(); 
       translate(x, y, z);
 
       let glowIntensity = 30 / g * (sin(time * 3 + i) * 0.3 + 0.7);
