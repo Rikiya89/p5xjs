@@ -296,7 +296,7 @@ function drawOrbit(graphics, orbit, alpha) {
   for (const vertex of orbit.vertices) graphics.vertex(vertex.x, vertex.y);
   graphics.endShape();
   graphics.stroke(MAGENTA.r, MAGENTA.g, MAGENTA.b, 235 * alpha);
-  graphics.strokeWeight(CONFIG.orbitWeight);
+  graphics.strokeWeight(CONFIG.orbitWeight * 1.5);
   graphics.beginShape();
   for (const vertex of orbit.vertices) graphics.vertex(vertex.x, vertex.y);
   graphics.endShape();
@@ -491,6 +491,7 @@ function drawActiveMarkers(graphics, orbit, state) {
   graphics.strokeWeight(2.2);
   graphics.circle(start.x, start.y, 31);
   graphics.stroke(MAGENTA.r, MAGENTA.g, MAGENTA.b, 145);
+  graphics.strokeWeight(4.5);
   graphics.line(close.x, close.y, start.x, start.y);
   const activeStartPoint = state && state.index === 0 && state.alpha > 0.2;
   const activeClose = state
