@@ -36,8 +36,8 @@ const HUD = {
   subtitleY: 348,
   bottomTextY: 1410,
   citationY: 1490,
-  bottomMainAlpha: 174,
-  citationAlpha: 112,
+  bottomMainAlpha: 235,
+  citationAlpha: 190,
 };
 
 // Mathematical parameters — world units, plane distance from the apex = 1.
@@ -542,7 +542,7 @@ function drawCone(ctx, sideFilter, frontPass) {
       const viewLength = Math.hypot(cam.ex - mx, cam.ey - my, cam.ez - mz);
       const cosine = nappe * facing * COS_A / viewLength;
       const fresnel = Math.pow(1 - Math.abs(cosine), 4);
-      const alpha = (frontPass ? 20 : 9) + 64 * fresnel;
+      const alpha = (frontPass ? 44 : 22) + 90 * fresnel;
       ctx.beginPath();
       tracePolyline3D(
         ctx,
@@ -564,7 +564,7 @@ function drawCone(ctx, sideFilter, frontPass) {
         writeHorizontalCircle(POINTS, y, Math.abs(y) * TAN_A, VIEW.circleSegments),
         sideFilter
       );
-      glowStroke(ctx, INK, 74, 1.3, 0.6);
+      glowStroke(ctx, INK, 130, 1.4, 0.6);
     }
     return;
   }
@@ -577,7 +577,7 @@ function drawCone(ctx, sideFilter, frontPass) {
       writeHorizontalCircle(POINTS, y, Math.abs(y) * TAN_A, VIEW.circleSegments),
       sideFilter
     );
-    glowStroke(ctx, INK, 18, 1, 0);
+    glowStroke(ctx, INK, 40, 1, 0);
   }
 
   ctx.setLineDash([5, 11]);
@@ -588,7 +588,7 @@ function drawCone(ctx, sideFilter, frontPass) {
     writeSegment(POINTS, 0, -MATH.lowerExtent, 0, 0, MATH.upperExtent, 0),
     sideFilter
   );
-  glowStroke(ctx, INK, 52, 1, 0);
+  glowStroke(ctx, INK, 96, 1, 0);
   ctx.setLineDash([]);
 
   if (planeSide(0, 0) * sideFilter >= 0 && projectPoint(0, 0, 0)) {
@@ -620,7 +620,7 @@ function drawConeSilhouette(ctx, sideFilter) {
       ),
       sideFilter
     );
-    glowStroke(ctx, INK, 108, 1.35, 0.7);
+    glowStroke(ctx, INK, 170, 1.5, 0.7);
   }
 }
 
@@ -676,7 +676,7 @@ function drawCuttingPlane(ctx) {
       ),
       0
     );
-    glowStroke(ctx, INK, (i === 0 ? 40 : 20) * falloff, 1, 0);
+    glowStroke(ctx, INK, (i === 0 ? 72 : 40) * falloff, 1, 0);
   }
   for (const w of [-0.5, 0, 0.5]) {
     const z = w * extentW;
@@ -691,7 +691,7 @@ function drawCuttingPlane(ctx) {
       ),
       0
     );
-    glowStroke(ctx, INK, w === 0 ? 30 : 16, 1, 0);
+    glowStroke(ctx, INK, w === 0 ? 56 : 32, 1, 0);
   }
 
   // Instrument ticks at the inner feather corners.
@@ -766,7 +766,7 @@ function drawSphere(ctx, sphere, alpha) {
       ),
       0
     );
-    glowStroke(ctx, CYAN, (latitude === 0 ? 30 : 17) * alpha, 1, 0);
+    glowStroke(ctx, CYAN, (latitude === 0 ? 60 : 36) * alpha, 1, 0);
   }
 
   // Tangency with the cone: the whole contact circle, drawn on as it appears.
@@ -865,7 +865,7 @@ function drawConstructionLines(ctx) {
   tracePolyline3D(ctx, POINTS, writeSegment(
     POINTS, gx * minT, COS_A * minT, gz * minT, gx * maxT, COS_A * maxT, gz * maxT
   ), 0);
-  glowStroke(ctx, INK, 60 * reveal, 1, 0);
+  glowStroke(ctx, INK, 110 * reveal, 1, 0);
 
   for (const sphere of scene.spheres) {
     const alpha = reveal * sphere.visibility;
@@ -1069,7 +1069,7 @@ function drawScreenFinish() {
   graphics.textFont("Georgia");
   graphics.textStyle(BOLD);
   graphics.textSize(72);
-  graphics.fill(INK.r, INK.g, INK.b, 218);
+  graphics.fill(INK.r, INK.g, INK.b, 245);
   graphics.text("DANDELIN SPHERES", W / 2, HUD.titleY);
   graphics.textFont("monospace");
   graphics.textStyle(NORMAL);
@@ -1080,7 +1080,7 @@ function drawScreenFinish() {
   graphics.fill(CYAN.r, CYAN.g, CYAN.b, 220);
   graphics.text("c = d / (cos β ± sin α) · e = sin β / cos α", W / 2, HUD.exponentY);
   graphics.textSize(26);
-  graphics.fill(INK.r, INK.g, INK.b, 166);
+  graphics.fill(INK.r, INK.g, INK.b, 215);
   graphics.text("SPHERE TANGENCY → FOCUS", W / 2, HUD.subtitleY);
   graphics.fill(INK.r, INK.g, INK.b, 235);
   graphics.textAlign(LEFT, TOP);
@@ -1094,7 +1094,7 @@ function drawScreenFinish() {
   );
   const progress = clamp(Math.round(loopProgress * LOOP_FRAMES) / (LOOP_FRAMES - 1), 0, 1);
   const indicatorX = HUD.safeX + (W - 2 * HUD.safeX) * progress;
-  graphics.stroke(INK.r, INK.g, INK.b, 34);
+  graphics.stroke(INK.r, INK.g, INK.b, 80);
   graphics.strokeWeight(1);
   graphics.line(HUD.safeX, HUD.trackY, W - HUD.safeX, HUD.trackY);
   graphics.stroke(INK.r, INK.g, INK.b, 184);
@@ -1356,7 +1356,7 @@ function bakeGrain() {
 
 function drawCornerGuides(graphics) {
   graphics.noFill();
-  graphics.stroke(255, 255, 255, 38);
+  graphics.stroke(255, 255, 255, 80);
   graphics.strokeWeight(0.7);
   const margin = 34;
   const length = 24;
