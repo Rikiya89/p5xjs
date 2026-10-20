@@ -1,6 +1,23 @@
+# Dependencies
 node_modules/
+
+# OS
 .DS_Store
+Thumbs.db
+
+# Editor / tooling
 .claude/
 .idea/
+.vscode/
 .serena/
 .tokensave/
+
+# Logs & env
+*.log
+npm-debug.log*
+.env*
+
+# Recorded output (Reels / test captures)
+*.mp4
+*.mov
+*.webm

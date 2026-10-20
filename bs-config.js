@@ -1,6 +1,6 @@
 module.exports = {
   server: ".",
-  files: ["**/*.html", "**/*.js", "**/*.css"],
+  files: ["**/*.html", "**/*.js", "**/*.css", "**/*.vert", "**/*.frag", "**/*.glsl"],
   ignore: ["node_modules", ".git"],
   open: true,
   notify: false,
