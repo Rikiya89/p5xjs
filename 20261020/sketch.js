@@ -19,7 +19,7 @@ const INK_R = 255, INK_G = 255, INK_B = 255;
 const SAFE_X = 120, SAFE_TOP = 270, SAFE_BOTTOM = 1460;
 const GEO_TOP = SAFE_TOP + 240, GEO_BOTTOM = SAFE_BOTTOM - 96;
 let canvasEl = null, grainPg = null, hudPg = null, backdropPg = null;
-let muxer = null, encoder = null, isRecording = false, recFrameCount = 0;
+let muxer = null, encoder = null, isRecording = false, recFrameCount = 0, recStartFrame = 0;
 let loopProgress = 0, phase = 0;
 let diniMesh, surfaceShader, ribbonShader, centreRibbons, spireRibbons, mandalaMesh;
 let debugFrame = false;
@@ -422,7 +422,7 @@ function primeState() {
 }
 function updateLoopTime() {
   // Frames 0..599 sample [0,TAU); TAU matches frame 0 without duplicating it.
-  const frame = isRecording ? recFrameCount : frameCount - 1;
+  const frame = isRecording ? recStartFrame + recFrameCount : frameCount - 1;
   loopProgress = (((frame % LOOP_FRAMES) + LOOP_FRAMES) % LOOP_FRAMES) / LOOP_FRAMES;
   if (!isRecording && typeof window !== "undefined" && typeof window.__phaseOverride === "number") {
     loopProgress = ((window.__phaseOverride / TAU) % 1 + 1) % 1;
@@ -745,8 +745,8 @@ function startRecording() {
   });
   encoder.configure({ codec: "avc1.640028", width: W, height: H, bitrate: 18_000_000, framerate: FPS });
   recFrameCount = 0;
-  loopProgress = 0;
-  phase = 0;
+  // Continue from the frame on screen; any LOOP_FRAMES-long window is still a seamless loop.
+  recStartFrame = frameCount;
   primeState();
   isRecording = true;
   const el = (id) => document.getElementById(id);
