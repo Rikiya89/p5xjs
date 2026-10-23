@@ -2,8 +2,12 @@
   "name": "p5js-workspace",
   "private": true,
   "version": "0.0.0",
+  "description": "Daily date-stamped p5.js creative coding sketches",
   "scripts": {
     "dev": "browser-sync start --config bs-config.js"
+  },
+  "engines": {
+    "node": ">=22"
   },
   "devDependencies": {
     "browser-sync": "^3.0.2"

@@ -6,5 +6,5 @@ module.exports = {
   notify: false,
   ui: false,
   ghostMode: false,
-  port: 3000
+  port: 3003
 };
