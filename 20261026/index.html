@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>20261026 — Boy's Surface / Impossible Geometry</title>
+  <script src="../p5.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mp4-muxer@5.1.3/build/mp4-muxer.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #030305; overflow: hidden; font-family: ui-monospace, "Menlo", "Consolas", monospace; }
+    canvas { display: block; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); max-width: 100vw; max-height: 100vh; width: auto; height: 100vh; object-fit: contain; touch-action: none; cursor: grab; }
+    canvas:active { cursor: grabbing; }
+    #controls { position: fixed; top: 16px; left: 16px; width: 300px; max-width: calc(100vw - 32px); max-height: calc(100vh - 32px); overflow-y: auto; background: rgba(0,0,0,0.8); padding: 14px 16px 12px; border-radius: 14px; color: #9aa3ad; z-index: 100; border: 1px solid rgba(255,255,255,0.1); backdrop-filter: blur(14px); font-size: 12px; scrollbar-width: thin; }
+    #controls.is-hidden { display: none; }
+    #controls.is-locked .ctl { opacity: 0.35; pointer-events: none; }
+    .head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
+    .head strong { color: #fff; font-size: 13px; letter-spacing: 0.14em; }
+    .head span { color: #555; font-size: 11px; }
+    .row { display: grid; grid-template-columns: 96px 1fr 52px; align-items: center; gap: 8px; margin: 5px 0; }
+    .row label { color: #8a929b; letter-spacing: 0.04em; }
+    .row output { color: #dfe6ee; text-align: right; font-variant-numeric: tabular-nums; }
+    input[type=range] { width: 100%; accent-color: #fff; height: 14px; }
+    .seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin: 2px 0 8px; }
+    .seg.two { grid-template-columns: repeat(2, 1fr); }
+    .seg button { margin: 0; padding: 6px 0; font-size: 11px; }
+    .seg button.is-on { background: rgba(255,255,255,0.14); border-color: rgba(255,255,255,0.5); color: #fff; }
+    .sep { height: 1px; background: rgba(255,255,255,0.08); margin: 10px 0; }
+    .btns { display: grid; grid-template-columns: repeat(2, 1fr); gap: 5px; }
+    button { background: rgba(40,40,40,0.9); color: #f0f0f0; border: 1px solid rgba(255,255,255,0.15); padding: 7px 10px; border-radius: 999px; cursor: pointer; font-size: 12px; font-family: inherit; letter-spacing: 0.06em; }
+    button:hover { background: rgba(70,70,70,0.9); border-color: rgba(255,255,255,0.3); }
+    button:disabled { color: #555; cursor: not-allowed; border-color: rgba(255,255,255,0.06); }
+    #recBtn { grid-column: span 2; }
+    #recBtn.is-rec { color: #ff6b6b; border-color: rgba(255,107,107,0.6); }
+    #exportBtn { grid-column: span 2; background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.4); }
+    #status { margin-top: 9px; color: #ccc; }
+    #progressTrack { margin-top: 6px; height: 3px; width: 100%; background: rgba(255,255,255,0.08); border-radius: 999px; overflow: hidden; }
+    #progressFill { height: 100%; width: 0%; background: #fff; }
+    #info { color: #666; margin-top: 8px; line-height: 1.7; font-size: 11px; }
+    #info span { color: #bbb; }
+    #showUi { position: fixed; top: 14px; left: 14px; z-index: 99; width: 14px; height: 14px; padding: 0; border-radius: 50%; background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2); display: none; }
+    #showUi.is-on { display: block; }
+    @media (max-width: 600px) {
+      #controls { top: auto; bottom: 10px; left: 10px; width: calc(100vw - 20px); max-height: 46vh; padding: 10px 12px; }
+      .row { grid-template-columns: 84px 1fr 46px; margin: 3px 0; }
+    }
+  </style>
+</head>
+<body>
+  <button id="showUi" title="Show UI (H)"></button>
+  <div id="controls">
+    <div class="head"><strong>BOY'S SURFACE</strong><span>20261026</span></div>
+    <div class="ctl">
+      <div class="seg" id="modeSeg">
+        <button data-mode="0">Sculpture</button><button data-mode="1">Wireframe</button><button data-mode="2">Hybrid</button>
+      </div>
+      <div class="seg two" id="colorSeg">
+        <button data-color="0">Monochrome</button><button data-color="1">Cyan · Magenta</button>
+      </div>
+      <div class="row"><label for="meshRes">Mesh</label><input id="meshRes" type="range" min="24" max="200" step="4"><output id="meshResOut"></output></div>
+      <div class="row"><label for="wireDensity">Wire density</label><input id="wireDensity" type="range" min="12" max="96" step="6"><output id="wireDensityOut"></output></div>
+      <div class="row"><label for="lineOpacity">Line opacity</label><input id="lineOpacity" type="range" min="0" max="1" step="0.01"><output id="lineOpacityOut"></output></div>
+      <div class="row"><label for="surfOpacity">Surface opac.</label><input id="surfOpacity" type="range" min="0" max="1" step="0.01"><output id="surfOpacityOut"></output></div>
+      <div class="row"><label for="highlight">Highlight</label><input id="highlight" type="range" min="0" max="2" step="0.01"><output id="highlightOut"></output></div>
+      <div class="row"><label for="speed">Speed</label><input id="speed" type="range" min="0.25" max="3" step="0.05"><output id="speedOut"></output></div>
+      <div class="row"><label for="camDist">Cam distance</label><input id="camDist" type="range" min="0.6" max="1.8" step="0.01"><output id="camDistOut"></output></div>
+      <div class="row"><label for="camRot">Cam rotation</label><input id="camRot" type="range" min="-180" max="180" step="1"><output id="camRotOut"></output></div>
+      <div class="row"><label for="lightDir">Light dir</label><input id="lightDir" type="range" min="-180" max="180" step="1"><output id="lightDirOut"></output></div>
+      <div class="row"><label for="preview">Preview res</label><input id="preview" type="range" min="0.5" max="1" step="0.5"><output id="previewOut"></output></div>
+      <div class="sep"></div>
+      <div class="btns">
+        <button id="playBtn">Pause</button><button id="resetBtn">Reset camera</button>
+        <button id="captionBtn">Caption: on</button><button id="hideBtn">Hide UI</button>
+        <button id="recBtn">● Rec live</button>
+        <button id="exportBtn">Export 10s · 600f · 60fps</button>
+      </div>
+    </div>
+    <div id="status">Ready</div>
+    <div id="progressTrack"><div id="progressFill"></div></div>
+    <div id="info">
+      Frame <span id="frameInfo">0</span> / 600 · <span id="meshInfo">—</span><br>
+      <span id="auditInfo">—</span><br>
+      Drag orbit · wheel distance · <span>H</span> UI · <span>Space</span> play · <span>E</span> export · <span>R</span> rec · <span>S</span> still
+    </div>
+  </div>
+  <script src="boy.js"></script>
+  <script src="sketch.js"></script>
+  <script src="capture.js"></script>
+</body>
+</html>
