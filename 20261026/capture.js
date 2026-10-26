@@ -121,6 +121,9 @@ async function startRecording() {
     setStatus("Record failed: " + (err && err.message || err), "#f66");
     return;
   }
+  // Start the take on frame 0 (the hero frame), like 20261020's recStartFrame reset; the next draw() is frame 0.
+  previewFrame = 0;
+  playing = true;
   recFrameCount = 0;
   recError = null;
   recording = true;

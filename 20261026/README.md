@@ -76,4 +76,4 @@ Low-powered devices: use Preview 50 % and a mesh of about 48.
 
 ### Live recording
 
-**● Rec live** (or `R`) records whatever is on screen, including orbit drags, slider moves and speed changes. It records at 1080×1920 with frame-count timestamps, stops automatically after one loop length (10 s), and saves `boys_surface_live_YYYYMMDD_HHMMSS.mp4`. Preview res and Export are locked while it runs. The result is not loop-exact, so use **Export** for the posted Reel.
+**● Rec live** (or `R`) restarts the loop at frame 0 and records whatever is on screen, including orbit drags, slider moves and speed changes. It records at 1080×1920 with frame-count timestamps, stops automatically after one loop length (10 s), and saves `boys_surface_live_YYYYMMDD_HHMMSS.mp4`. Preview res and Export are locked while it runs. The result is not loop-exact, so use **Export** for the posted Reel.
