@@ -6,6 +6,7 @@ node_modules/
 Thumbs.db
 
 # Editor / tooling
+!/AGENTS.md
 .claude/
 .idea/
 .vscode/

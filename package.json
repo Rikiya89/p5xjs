@@ -4,7 +4,8 @@
   "version": "0.0.0",
   "description": "Daily date-stamped p5.js creative coding sketches",
   "scripts": {
-    "dev": "browser-sync start --config bs-config.js"
+    "dev": "browser-sync start --config bs-config.js",
+    "test": "node --test tests/*.test.cjs"
   },
   "engines": {
     "node": ">=22"
