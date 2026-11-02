@@ -1,78 +1,66 @@
-# PLAN: 20261029 — DESCARTES BLOOM
+# PLAN: 20261102 — DUPIN CYCLIDE
 
-> Planned by: opus-5-5 at effort low on 2026-10-29
-> Implement with: executed in the same session (user brief demanded full implementation). Check boxes as you go.
+> Planned by: opus-5-5 at effort high on 2026-11-02
+> Implement with: executed in the same session (user brief demanded full implementation + verification). Check boxes as you go.
 
 ## 1. Goal
-A new sketch `20261029/descartes.html` + `20261029/descartes.js`, sibling to the uncommitted Hopf sketch (untouched).
-An Apollonian gasket built from Descartes' theorem reveals itself over an 8 s seamless loop:
-Genesis (4 root circles) → Recursion → Bloom → Return. Recording via the folder's existing inline mp4-muxer recorder.
+`20261102/` (a byte-identical copy of the 20261019 Dini sketch) becomes a ring Dupin cyclide simulator for a seamless Reel.
+The cyclide breathes between a near-torus and a strongly asymmetric ring; both families of lines of curvature (all circles)
+are drawn as the wireframe, the K>0 / K<0 regions use CYAN / MAGENTA and the two parabolic circles (K=0) are ACID.
+Done = renders in Chrome, `?audit=1` reports `ok: true`, loop seam ≤ interior step, preserved items diff-clean vs 20261019.
 
 ## 2. Constraints & decisions (final)
-- Files: `20261029/descartes.html`, `20261029/descartes.js`. `index.html`, `sketch.js`, `cover.png` untouched.
-- Canvas 1080×1920, `pixelDensity(1)`, 60 fps, P2D (circles need no WEBGL; the Hopf WEBGL finish pass is not ported).
-- Loop: `MAX_DURATION = 8` → `LOOP_FRAMES = 480`. Time from `recFrameCount` while recording → deterministic export.
-- Palette: BG `rgb(3,3,5)`, ink `rgb(255,255,255)`, additive (`blendMode(ADD)`), baked grain — same as sketch.js.
-- Text overlay (T): ui-monospace bold 54 title at `SAFE_MARGIN_TOP+50`, normal 30 subtitle at `+106`, x = `(W−SAFE_MARGIN_RIGHT)/2`.
-- Safe zone: top 250, bottom 440, right 140 → composition centre (470, 865); gasket radius 410 px (+2.5 % breath).
-- Export: `descartes_bloom_<timestamp>.mp4` (avc1.640028, 18 Mbps). Fixes the copied `villarceau_` name.
-- Cover (C) captures the bloom peak, not frame 0 (frame 0 is the sparse genesis state the brief asks for).
+- Files: `20261102/sketch.js`, `20261102/index.html` only. Same architecture (PARAMS / STAGE / frameState / fitStage / shader mesh / HUD / audit / UI / recorder).
+- Canvas 1080×1920, `pixelDensity(1)`, 60 fps, **10 s = 600 frames kept** (series convention; all phase terms integer-periodic so `MAX_DURATION = 8` is a one-line switch).
+- Palette unchanged: BG (3,3,5) · INK white · CYAN (0,229,255) · MAGENTA (255,61,191) · ACID (182,255,61).
+- Typography unchanged: Georgia bold 72 title "DUPIN CYCLIDE"; monospace 34 / 23 CYAN / 26 / 26 readout / 22 ACID / 28 captions / 22 citation; all HUD anchors unchanged.
+- Recorder (inline mp4-muxer + WebCodecs, avc1.640028, 18 Mbps) unchanged except filename prefix `dini_surface_` → `dupin_cyclide_` (mp4 + S still).
+- Ring condition enforced by `sanitizeParams`: `μ ≤ a − 0.05`, `cMid + swing ≤ μ − 0.05`.
 
-## 3. Math
-Signed curvature k = 1/r, outer circle k < 0. Unit space: outer circle k = −1, centre 0.
+## 3. Math (verified in Node, scratchpad `cyc.mjs`, `ksweep.mjs`)
+a = 1, c ∈ [0, μ), b = √(a² − c²), D = a − c cos u cos v > 0
+- x = [μ(c − a cos u cos v) + b² cos u] / D
+- y = b sin u (a − μ cos v) / D
+- z = b sin v (c cos u − μ) / D
+- Implicit: (x² + y² + z² − μ² + b²)² = 4(ax − cμ)² + 4b²y²  (residual ≤ 1e-14)
+- u = const and v = const curves are exact circles (err ≤ 1e-15); F = M = 0 → they are the lines of curvature.
+- Tube (v-circle) radius ranges μ − c … μ + c. c = 0 → torus R = a, r = μ.
+- K > 0 ⟺ cos v < 0; parabolic circles at v = π/2, 3π/2 (0 mismatches over μ∈[0.3,0.85], c∈[0,μ−0.05]).
+- x-extent [−(a+c+μ), a−c+μ] → shift x by +c so the spin axis passes through the bounding centre; z odd in v → zCenter = 0.
+- Normals: central differences (h = 2e-3) of the position in JS and GLSL, n = r_u × r_v.
 
-Descartes: (k1+k2+k3+k4)² = 2(k1²+k2²+k3²+k4²)
-⇒ k4 = k1+k2+k3 ± 2√(k1k2+k2k3+k3k1)
-Complex Descartes (z = centre as complex number):
-⇒ k4z4 = k1z1+k2z2+k3z3 ± 2√(k1k2z1z2 + k2k3z2z3 + k3k1z3z1)
-The ± signs are not independently paired → evaluate all 4 combinations, keep those tangent to all three
-(tangency: |zi − zj| = |1/ki + 1/kj| with signed radii; covers internal tangency to the outer circle).
+Schedule (phase = p·2π): c(p) = cMid + swing·cos(phase) (hero = max asymmetry at p=0, near-torus at p=0.5);
+spin = spinTurns·phase; tilt = tilt + 0.06 sin(phase); yaw = 0.08 sin(phase + 0.7);
+travelling circles: u* = −2·phase (a meridian), v* = phase (a parallel).
 
-Root (D3 symmetric): three equal circles inside the unit circle: r = 2√3 − 3 ≈ 0.464102, centres at distance
-1 − r, angles −π/2 + 2πj/3. Check: k = 1 + 2/√3, roots of Descartes for (A,B,C): k(3 ± 2√3) = {13.9282, −1}.
-The −1 root is the outer circle (validates the quadruple); the +root is the centre circle D (complex formula).
-
-Recursion (Vieta jump, linear ⇒ no sign ambiguity, stable): if (c1,c2,c3,c4) is a Descartes quadruple,
-the other circle tangent to c1,c2,c3 is k' = 2(k1+k2+k3) − k4, (kz)' = 2(k1z1+k2z2+k3z3) − k4z4.
-Gap queue (i,j,l | old): new = reflect(old); push (i,j,new|l), (j,l,new|i), (i,l,new|j). Each circle is generated
-exactly once (Apollonian group tree without backtracking). Stop if r·R_px < MIN_RADIUS_PX or depth > MAX_DEPTH.
-k_child > max(k_parents) ⇒ reveal-by-size never shows a child before its parents.
-
-Reveal level L = ln(1/r) / ln(R_px / MIN_RADIUS_PX) ∈ [0,1]; core family (descendants of gap A,B,C) leads by CORE_LEAD.
-Frontier F(u) = F0 + (F1 − F0)·E(u), F0 = max root L + SOFT, F1 = 1 + SOFT.
-E(u): 0 → smootherstep rise [riseStart, riseEnd] → 1 hold → smootherstep fall [fallStart, fallEnd] → 0 (C², periodic).
-Per circle a = clamp((F − L)/SOFT) → alpha = s5(a), scale = EMERGE_FROM + (1−EMERGE_FROM)·s5(a).
-Rotation θ(u) = ROT_TURNS·(2π/3)·(u − sin(2πu)/2π): gasket is D3-symmetric ⇒ θ(1) ≡ θ(0); θ'(0)=θ'(1)=0.
-Breath scale 1 + BREATH·E(u).
+| param | range | default |
+|---|---|---|
+| cMid | 0 … 0.5 | 0.24 |
+| swing | 0 … 0.2 | 0.18 |
+| μ | 0.3 … 0.85 | 0.6 |
+| rows (cols = 2·rows) | 40 … 120 | 96 |
+| wire (u-circles; v-circles = wire/2) | 6 … 48 | 24 |
+| tilt | 0 … 1.4 | 0.8 |
+| spinTurns | −2 … 2 | 1 |
+| light | 0.3 … 1.8 | 1 |
 
 ## 4. Architecture
-descartes.js: tunables → geometry (csqrt, solveDescartes, buildGasket) → buckets (Path2D cache per level bucket)
-→ loop state (bloomEnvelope, frameState) → draw → checks (checkDescartes, checkLoopClosure) → grain/finish → recorder (verbatim).
+Replace Dini math/mesh/shaders/frame state/HUD strings/audit/presets/sliders; keep setup, loop clock, grain, corner guides, HUD composite, recorder.
+Shader uniforms: uA uB uC uMu uScale uDistance uDepthSpan uPos(K>0) uNeg(K<0) uEdge uInk uLight uWireU uWireV uWireOn uEdgeOn uTrace(u*, v*).
 
 ## 5. Tasks
-- [x] 1. Geometry + Node math check (tangency, Descartes residual, monotone k, containment, duplicates, count)
-- [x] 2. Rendering (buckets, strokes, glow on large circles only), HTML copy with new titles
-- [x] 3. Loop state + loop closure check (u=0 vs u=1, plus 120° symmetry mid-loop)
-- [x] 4. Browser verification via headless CDP: exceptions, frames at u = 0 / .3 / peak / .82 / 1, timing, blowout
-- [x] 5. Export check: 480 frames, 8.0 s (ffprobe)
-
-### Round 2 (polish + text animation, 2026-10-29)
-- [x] 6. Arc-sweep emergence (outline draws on from the side facing its host centre; radius fixed → tangency exact while emerging)
-- [x] 7. NEST_TONE hierarchy [1, .62, .42], glow passes only on nest 0; 6 root kissing points (k_a z_a + k_b z_b)/(k_a + k_b) lit at Genesis
-- [x] 8. World-space buckets across all gaskets (438 → 69 stroke groups)
-- [x] 9. Per-frame HUD in the 20261026 layout, monochrome: tracked Georgia title, theorem, live Vieta relation, N / k_max readout, θ, loop track with phase ticks, letter-sweep captions per phase, citation
-- [x] 10. Verify: lossless seam (text bands identical), export 480 f / 8.000 s, timings
-
-### Round 3 (complex pattern from the formula, 2026-10-29)
-- [x] 11. Dual lace: per gap (i,j,l|o) the dual circle k⊥ = (kᵢ+kⱼ+kₗ−kₒ)/2, (kz)⊥ likewise; drawn as its arcs inside the member circles (hyperbolic geodesics between kissing points). Check: orthogonality 6e-15, through kisses 5e-14, root dual r = 2−√3.
-- [x] 12. LACE envelope rise .34–.50, fall .70–.86 (zero at seam); arcs spun from one kiss to the next; nest ≤ 1, chord ≥ 12 px → 3 204 arcs. Caption "THE DUAL LACE", live line switches to the k⊥ relation.
+- [x] 1. Math + mesh + shaders + render (runnable slice)
+- [x] 2. Frame state, fitStage, HUD text, captions, citation
+- [x] 3. Audit (circles, implicit, K sign, mesh finiteness, framing, typography, seam)
+- [x] 4. UI: sliders/presets/toggles in sketch.js + index.html
+- [x] 5. Verification: CDP render probe, audit ok, seam crop, preservation diffs, viewports
 
 ## 6. Verification
-Console: `DESCARTES CHECK PASS`, `LOOP CHECK PASS`. Peak frame: saturated pixels are line cores only (worst 16 px cell ≤ 25 % blown, same as genesis), gasket bbox inside safe zone.
+Headless Chrome + CDP against `http://localhost:3003/20261102/`: no exceptions, frameCount advances, `?audit=1` ok,
+toDataURL lit%/blowout%, geometry-crop seam diff (frame 599 vs 0 ≈ interior step), diff constants/text/recorder vs 20261019.
 
 ## 7. Out of scope
-No GLSL, no new deps, no changes to Hopf files or shared libs.
+New dependencies, capture.js split, palette/typography/HUD layout changes, horn/spindle cyclides.
 
 ## Deviations
-- 2026-10-29: first render (single gasket, 563 circles) read as four empty discs, not "infinitely nested". Fix: every circle ≥ NEST_MIN_PX (40) hosts the same unit template as its own gasket (host = negative-curvature outer), NEST_LEVELS = 2, each nested gasket spins rigidly inside its host by NEST_SPIN = [−2, 2] × 120° per loop (tangency preserved: rigid rotation about the host centre; seam preserved: D3 symmetry). 40 gaskets, 2 933 circles.
-- 2026-10-29: complex Descartes at the symmetric root has Σkᵢkⱼzᵢzⱼ = 0 → √ amplifies roundoff to ~1e-8; candidates selected at SOLVE_EPS = 1e-6 and the coinciding ± pair merged by mean.
+(none)
