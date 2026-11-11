@@ -642,7 +642,7 @@ function piMultiple(value) {
 function hudText() {
   const c = PARAMS.pitch, T = PARAMS.turns;
   return {
-    header: "MATHEMATICAL STUDIES / 001",
+    header: "MATHEMATICAL STUDIES / 002",
     headerRight: `HELICOID / 0${pad2(presetIndex + 1)}`,
     title: ["HELICOID", "INFINITE"],
     column: [
