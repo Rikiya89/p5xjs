@@ -1,14 +1,14 @@
 "use strict";
 
-// HELICOID — INFINITE SPIRAL GEOMETRY
-// X(u, v) = (u cos v, u sin v, c v),  |u| ≤ U,  |v| ≤ πT  (T turns, pitch c, rise 2πc per turn).
-// X_u = (cos v, sin v, 0), X_v = (−u sin v, u cos v, c): E = 1, F = 0, G = u² + c².
-// N = X_u × X_v / |…| = (c sin v, −c cos v, u) / √(c² + u²); e = g = 0, f = c / √(c² + u²),
-// so H = (eG − 2fF + gE) / 2(EG − F²) = 0 and K = −c² / (c² + u²)² < 0.
-// Every level set z = const is a straight line through the axis (a ruling), and every u = const
-// curve is a helix of radius |u| — its shadow on the base plate is a concentric circle.
-// Screw symmetry: X(u, v + φ) = R_φ X(u, v) + (0, 0, cφ). Half-turn: R_π X(u, v) = X(−u, v), so a
-// spin of π per loop returns the image onto itself.
+// SCHWARZ LANTERN — A PARADOX OF SURFACE AREA
+// Rings k = 0 … M of N vertices on the cylinder of radius R, height H:
+//   θ(j, k) = 2πj/N + (k mod 2)π/N,   P(j, k) = (R cos θ, R sin θ, −H/2 + kH/M)
+// Each band k → k+1 holds N "up" triangles (base on ring k) and N "down" triangles (base on
+// ring k+1): 2N isosceles faces per band, T = 2NM in total. Every face has
+//   base b = 2R sin(π/N),  height h = √[(H/M)² + R²(1 − cos π/N)²],
+// so the lateral area (no end caps) is A = 2MNR sin(π/N) · √[(H/M)² + R²(1 − cos π/N)²].
+// Max gap to the cylinder R(1 − cos π/N) → 0 for any refinement, yet with M/N² → c:
+//   A / 2πRH → √(1 + π⁴c²R² / 4H²)   — 1 for c = 0, a wrong finite limit for c > 0, ∞ if M/N² → ∞.
 
 const W = 1080;
 const H = 1920;
@@ -19,136 +19,186 @@ const MAX_FRAMES = FPS * MAX_DURATION;
 const LOOP_FRAMES = MAX_FRAMES;
 const TAU = Math.PI * 2;
 
-// Neo-Swiss palette, same { r, g, b } structure as the rest of the series.
-const BG = { r: 242, g: 240, b: 234 };      // #F2F0EA off-white
-const INK = { r: 17, g: 17, b: 17 };        // #111111 near-black
-const CHARCOAL = { r: 32, g: 32, b: 32 };   // #202020
-const MUTED = { r: 168, g: 166, b: 159 };   // #A8A69F
-const COBALT = { r: 36, g: 71, b: 255 };    // #2447FF
-
-// Asymmetric 12-column grid: 84 px margins, 54 px columns, 24 px gutters.
-const GRID = {
-  left: 84,
-  right: W - 84,
-  colStep: 78,
-};
-
-function gridX(column) {
-  return GRID.left + GRID.colStep * column;
-}
+const BG = { r: 3, g: 3, b: 5 };
+const INK = { r: 255, g: 255, b: 255 };
+const CYAN = { r: 0, g: 229, b: 255 };
+const MAGENTA = { r: 255, g: 61, b: 191 };
+const ACID = { r: 182, g: 255, b: 61 };
 
 const HUD = {
   safeX: 56,
-  headerY: 214,
-  ruleTopY: 252,
-  titleY: 278,
-  titleLead: 76,
-  columnY: 288,
-  columnLead: 34,
-  trackY: 470,
-  readoutY: 486,
-  ruleBottomY: 1268,
-  formulaY: 1284,
-  citationY: 1410,
+  stageTextX: 84,
+  rightTextX: 140,
+  stageY: 374,
+  trackY: 418,
+  titleY: 210,
+  formulaY: 276,
+  exponentY: 319,
+  subtitleY: 348,
+  bottomTextY: 1322,
+  citationY: 1404,
+  bottomMainAlpha: 235,
+  citationAlpha: 190,
+  dataY: 456,
+  dataRow: 66,
 };
 
-// Vertical height ruler in the left column: Z ∈ [−πcT, πcT] mapped to [rulerBottom, rulerTop].
-const RULER = {
-  x: 112,
-  top: 640,
-  bottom: 1120,
-  tick: 8,
+// Area-ratio chart strip under the lantern: x = N (log), y = A / 2πRH (log).
+const CHART = {
+  headerY: 1112,
+  x0: 150,
+  x1: W - 84,
+  y0: 1148,
+  y1: 1276,
+  nMin: 4,
+  nMax: 32,
 };
 
-// Adjustable parameters.
-//   pitch c       — z = c v, rise per turn 2πc (relative to the radial extent U)
-//   turns T       — v ∈ [−πT, πT]; multiples of 0.5 so the ruler ticks land on half-turns
-//   extent U      — radial half-width |u| ≤ U
-//   rows          — mesh resolution across u; v gets 6 × rows segments
-//   helices       — u = const curves per side (= concentric circles on the plate)
-//   rulings       — z = const lines per turn
-//   divisions     — angular divisions of the sacred-geometry plate
 const PARAMS = {
-  pitch: 0.12,
-  turns: 1.5,
-  extent: 1,
-  rows: 96,
-  helices: 6,
-  rulings: 24,
-  divisions: 12,
-  tilt: 0.22,
+  N: 4,
+  M: 8,
+  R: 1,
+  H: 2.4,
   spinTurns: 1,
   light: 1,
+  mode: "auto",
+  preset: "C",
+  reference: false,
 };
 
 const LIMITS = {
-  minRows: 48,
-  maxRows: 160,
-  colsPerRow: 6,
+  minN: 3,
+  maxN: 96,
+  minM: 1,
+  maxM: 2048,
+  maxTriangles: 100000,
+  minR: 0.5,
+  maxR: 2,
+  minH: 0.5,
+  maxH: 4,
 };
 
-// Stage box the sculpture is fitted into once per parameter set (never per frame).
-const STAGE = {
-  left: 176,
-  right: GRID.right,
-  top: 548,
-  bottom: 1212,
-  fov: 0.5,
-  tiltSwing: 0.06,
-  yawSwing: 0.05,
-  fitSamples: 60,
-  levelOvershoot: 1.2,
-  // Spin at t = 0 as a fraction of π (the half-turn symmetry period).
-  spinPhase: 0.15,
+// Refinement laws. The steps are what gets rendered; the chart curves use the same law
+// for real-valued N up to CHART.nMax (computed only — never drawn as a mesh).
+const PRESETS = {
+  A: {
+    name: "A · CONVERGENCE",
+    law: "M = N/2",
+    limit: "M/N² → 0",
+    m: (n) => n / 2,
+    steps: [[4, 2], [6, 3], [8, 4], [12, 6], [16, 8], [24, 12], [32, 16]],
+  },
+  B: {
+    name: "B · FINITE EXCESS",
+    law: "M = N²/2",
+    limit: "M/N² → 1/2",
+    c: 0.5,
+    m: (n) => n * n / 2,
+    steps: [[4, 8], [6, 18], [8, 32], [10, 50], [12, 72], [16, 128], [24, 288], [32, 512]],
+  },
+  C: {
+    name: "C · DIVERGENCE",
+    law: "M = N³/8",
+    limit: "M/N² → ∞",
+    m: (n) => n * n * n / 8,
+    steps: [[4, 8], [6, 27], [8, 64], [10, 125], [12, 216], [14, 343], [16, 512]],
+  },
+};
+const PRESET_KEYS = ["A", "B", "C"];
+
+// Camera in display units (default lantern: radius 1, height 2.4). Target = (tx, ty, 0); the eye
+// sits at distance d along (sin az cos el, −sin el, cos az cos el); roll turns the up vector.
+const CAMERA = {
+  fov: 0.66,
+  near: 0.05,
+  far: 600,
+  base: { tx: 0, ty: 1.0, az: 0, el: 0.3, d: 15.5, roll: 0 },
+  swayEl: 0.05,
+  revealDolly: 0.06,
 };
 
-// Sacred-geometry base plate, in units of U, sitting below the lowest ruling.
-const PLATE = {
-  gap: 0.16,
-  radius: 1.16,
-  tick: 0.05,
-  segments: 128,
-  axisAbove: 0.24,
-  axisBelow: 0.1,
-};
+// Display box: the lantern is scaled uniformly to fit radius ≤ 1 and height ≤ 2.4.
+const DISPLAY = { radius: 1, height: 2.4 };
 
-const HALF_PI = Math.PI / 2;
+// Loop timeline (p ∈ [0, 1)): hold → refine → reveal → unrefine → hold.
+const TIMELINE = {
+  growStart: 0.06,
+  growEnd: 0.58,
+  shrinkStart: 0.8,
+  shrinkEnd: 0.94,
+  fade: 0.016,
+};
 
 // ================================================================
-// HELICOID — the same formulas run here and in GLSL
+// SCHWARZ LANTERN — closed forms and the procedural mesh
 // ================================================================
 
-function halfHeight() {
-  return Math.PI * PARAMS.pitch * PARAMS.turns;
+function ringAngle(j, k, N) {
+  return TAU * j / N + (k % 2) * Math.PI / N;
 }
 
-function plateZ() {
-  return -halfHeight() - PLATE.gap * PARAMS.extent;
+function ringPoint(j, k, N, M, R, Hc) {
+  const theta = ringAngle(j, k, N);
+  return [R * Math.cos(theta), R * Math.sin(theta), -Hc / 2 + k * Hc / M];
 }
 
-function axisTopZ() {
-  return halfHeight() + PLATE.axisAbove * PARAMS.extent;
+function facetBase(N, R) {
+  return 2 * R * Math.sin(Math.PI / N);
 }
 
-function axisBottomZ() {
-  return plateZ() - PLATE.axisBelow * PARAMS.extent;
+function facetHeight(N, M, R, Hc) {
+  return Math.hypot(Hc / M, R * (1 - Math.cos(Math.PI / N)));
 }
 
-function helicoidPoint(u, v, c, out = [0, 0, 0]) {
-  out[0] = u * Math.cos(v);
-  out[1] = u * Math.sin(v);
-  out[2] = c * v;
-  return out;
+function lanternArea(N, M, R, Hc) {
+  return 2 * M * N * R * Math.sin(Math.PI / N) * Math.sqrt((Hc / M) ** 2 + (R * (1 - Math.cos(Math.PI / N))) ** 2);
 }
 
-function helicoidNormal(u, v, c) {
-  const length = Math.sqrt(c * c + u * u);
-  return [c * Math.sin(v) / length, -c * Math.cos(v) / length, u / length];
+function cylinderArea(R, Hc) {
+  return TAU * R * Hc;
 }
 
-function gaussianCurvature(u, c) {
-  const q = c * c + u * u;
-  return -c * c / (q * q);
+function areaRatio(N, M, R, Hc) {
+  return lanternArea(N, M, R, Hc) / cylinderArea(R, Hc);
+}
+
+function maxGap(N, R) {
+  return R * (1 - Math.cos(Math.PI / N));
+}
+
+// Limit of A / 2πRH along a preset's law (Infinity for divergence).
+function regimeLimit(key, R, Hc) {
+  if (key === "A") return 1;
+  if (key === "B") return Math.sqrt(1 + Math.PI ** 4 * PRESETS.B.c ** 2 * R * R / (4 * Hc * Hc));
+  return Infinity;
+}
+
+// Vertex (j, k) has index k·N + (j mod N). Up faces (v0, v1, apex) and down faces (w1, w0, apex)
+// are wound counter-clockwise seen from outside, so (b − a) × (c − a) points away from the axis.
+function lanternFaces(N, M) {
+  const faces = new Int32Array(6 * N * M);
+  const id = (j, k) => k * N + ((j % N) + N) % N;
+  let f = 0;
+  for (let k = 0; k < M; k++) {
+    const odd = k % 2;
+    for (let j = 0; j < N; j++) {
+      faces[f++] = id(j, k); faces[f++] = id(j + 1, k); faces[f++] = id(j + odd, k + 1);
+      faces[f++] = id(j + 1, k + 1); faces[f++] = id(j, k + 1); faces[f++] = id(j + 1 - odd, k);
+    }
+  }
+  return faces;
+}
+
+function lanternVertices(N, M, R, Hc) {
+  const vertices = new Float64Array(3 * N * (M + 1));
+  for (let k = 0; k <= M; k++) {
+    for (let j = 0; j < N; j++) vertices.set(ringPoint(j, k, N, M, R, Hc), 3 * (k * N + j));
+  }
+  return vertices;
+}
+
+function triangleCount(N, M) {
+  return 2 * N * M;
 }
 
 function cross(p, q) {
@@ -159,176 +209,266 @@ function dot(p, q) {
   return p[0] * q[0] + p[1] * q[1] + p[2] * q[2];
 }
 
+function normalize3(p) {
+  const length = Math.hypot(...p);
+  return [p[0] / length, p[1] / length, p[2] / length];
+}
+
+function lerp1(a, b, t) {
+  return a + (b - a) * t;
+}
+
+function fitScale(R, Hc) {
+  return Math.min(DISPLAY.radius / R, DISPLAY.height / Hc);
+}
+
+// Lantern → world: spin about the cylinder axis, map z (axis) to −y (p5's y points down),
+// then scale to the display box. The vertex shader applies the identical transform.
+function toWorld(p, spin, k) {
+  const c = Math.cos(spin), s = Math.sin(spin);
+  const x = c * p[0] - s * p[1];
+  const y = s * p[0] + c * p[1];
+  return [k * x, -k * p[2], k * y];
+}
+
 // ================================================================
 // FRAME STATE — a pure function of loop progress, shared by draw and audit
 // ================================================================
 
 const frameState = {
   spin: 0,
-  tilt: 0,
-  yaw: 0,
+  stepA: 0,
+  stepB: 0,
+  mix: 0,
   level: 0,
-  levelVisible: 1,
-  rulingAngle: 0,
+  reveal: 0,
+  surf: 0.55,
+  wire: 1,
+  ref: 0,
+  cam: { ...CAMERA.base },
 };
 
-// Framing: fixed for a parameter set, solved over the whole loop by fitStage().
-const fit = { scale: 200, tx: 0, ty: 0, depthSpan: 1, key: "" };
-
-let presetIndex = 1;
+let modeIndex = 0;
 
 function smoothstep(edge0, edge1, x) {
   const t = clamp((x - edge0) / (edge1 - edge0), 0, 1);
   return t * t * (3 - 2 * t);
 }
 
-function fract(x) {
-  return x - Math.floor(x);
+function envelope(p, window) {
+  return smoothstep(window[0], window[1], p) * (1 - smoothstep(window[2], window[3], p));
 }
 
+const MODES = {
+  hybrid: { surf: 0.55, wire: 1, ref: 0 },
+  solid: { surf: 0.96, wire: 0, ref: 0 },
+  wire: { surf: 0, wire: 1, ref: 0 },
+  compare: { surf: 0.5, wire: 0.8, ref: 1 },
+};
+const MODE_KEYS = ["auto", "hybrid", "solid", "wire", "compare"];
+
+// The (N, M) steps the loop walks through: the active preset, or the single manual (N, M).
+function activeSteps() {
+  return PARAMS.preset === "manual" ? [[PARAMS.N, PARAMS.M]] : PRESETS[PARAMS.preset].steps;
+}
+
+// Step changes: forward over [growStart, growEnd], backward over [shrinkStart, shrinkEnd].
+function stepEvents(count) {
+  const events = [];
+  if (count < 2) return events;
+  const span = Math.max(1, count - 2);
+  for (let i = 1; i < count; i++) {
+    events.push({ t: lerp1(TIMELINE.growStart, TIMELINE.growEnd, (i - 1) / span), from: i - 1, to: i });
+  }
+  for (let i = count - 1; i >= 1; i--) {
+    events.push({ t: lerp1(TIMELINE.shrinkStart, TIMELINE.shrinkEnd, (count - 1 - i) / span), from: i, to: i - 1 });
+  }
+  return events;
+}
+
+// {a, b, mix}: crossfade from step a to step b with weight mix (a = b, mix = 0 between events).
+function stepState(p, count) {
+  let index = 0;
+  const half = TIMELINE.fade / 2;
+  for (const event of stepEvents(count)) {
+    if (p >= event.t + half) index = event.to;
+    else if (p > event.t - half) return { a: event.from, b: event.to, mix: smoothstep(event.t - half, event.t + half, p) };
+    else break;
+  }
+  return { a: index, b: index, mix: 0 };
+}
+
+function modeTarget(p) {
+  if (PARAMS.mode !== "auto") return MODES[PARAMS.mode];
+  // Auto: hybrid while refining; solid + reference cylinder for the area reveal.
+  const solid = envelope(p, [0.58, 0.64, 0.78, 0.84]);
+  return { surf: lerp1(0.55, 0.9, solid), wire: 1 - 0.7 * solid, ref: solid };
+}
+
+// Every term is equal at p = 0 and p = 1, so frame 600 ≡ frame 0.
 function computeFrameState(p) {
-  const phase = p * TAU;
-  // π per loop: frame 600 is frame 0 carried onto itself by the half-turn symmetry.
-  frameState.spin = Math.PI * (STAGE.spinPhase + PARAMS.spinTurns * p);
-  frameState.tilt = PARAMS.tilt + STAGE.tiltSwing * Math.sin(phase);
-  frameState.yaw = STAGE.yawSwing * Math.sin(phase + 0.7);
-  // Screw phase: the cobalt ruling climbs −1.2 zₕ → 1.2 zₕ; it sits on z = 0 at frame 0 and wraps at
-  // p = 0.5 while it is off the surface on both ends.
-  const zh = halfHeight();
-  frameState.level = 2 * STAGE.levelOvershoot * zh * (fract(p + 0.5) - 0.5);
-  frameState.levelVisible = 1 - smoothstep(0.97 * zh, 1.03 * zh, Math.abs(frameState.level));
-  // World direction of that ruling: v = z / c, carried by the spin.
-  frameState.rulingAngle = frameState.level / PARAMS.pitch + frameState.spin;
+  const fs = frameState;
+  fs.spin = PARAMS.spinTurns * TAU * p;
+  const steps = activeSteps();
+  const state = stepState(p, steps.length);
+  fs.stepA = state.a;
+  fs.stepB = state.b;
+  fs.mix = state.mix;
+  fs.level = lerp1(state.a, state.b, state.mix);
+  fs.reveal = envelope(p, [0.58, 0.64, 0.78, 0.84]);
+  Object.assign(fs.cam, CAMERA.base);
+  fs.cam.el += CAMERA.swayEl * Math.sin(TAU * p);
+  fs.cam.d *= 1 - CAMERA.revealDolly * fs.reveal;
+  const mode = modeTarget(p);
+  fs.surf = mode.surf;
+  fs.wire = mode.wire;
+  fs.ref = PARAMS.reference ? 1 : mode.ref;
 }
 
-// Same pose renderFrame applies: spin about Z (sculpture only), tilt (elevation), yaw.
-function posePoint(point, out, spun = true) {
-  const spin = spun ? frameState.spin : 0, tilt = HALF_PI - frameState.tilt, yaw = frameState.yaw;
-  let x = point[0], y = point[1], z = point[2];
-  let c = Math.cos(spin), s = Math.sin(spin);
-  [x, y] = [c * x - s * y, s * x + c * y];
-  c = Math.cos(tilt); s = Math.sin(tilt);
-  [y, z] = [c * y - s * z, s * y + c * z];
-  c = Math.cos(yaw); s = Math.sin(yaw);
-  [x, z] = [c * x + s * z, -s * x + c * z];
-  out[0] = x; out[1] = y; out[2] = z;
-  return out;
+// The step whose numbers are shown (switches at the crossfade midpoint).
+function shownStep() {
+  const steps = activeSteps();
+  return steps[frameState.mix < 0.5 ? frameState.stepA : frameState.stepB];
 }
 
-function cameraDistance() {
-  return (H / 2) / Math.tan(STAGE.fov / 2);
+// Look-at basis matching p5's camera() + perspective() (p5 maps +y_cam down the screen).
+function cameraBasis(cam) {
+  const target = [cam.tx, cam.ty, 0];
+  const ce = Math.cos(cam.el);
+  const offset = [Math.sin(cam.az) * ce, -Math.sin(cam.el), Math.cos(cam.az) * ce];
+  const eye = target.map((value, i) => value + cam.d * offset[i]);
+  const fwd = normalize3(target.map((value, i) => value - eye[i]));
+  let side = normalize3(cross(fwd, [0, 1, 0]));
+  let up = cross(side, fwd);
+  const cr = Math.cos(cam.roll), sr = Math.sin(cam.roll);
+  up = up.map((value, i) => value * cr + side[i] * sr);
+  side = normalize3(cross(fwd, up));
+  up = cross(side, fwd);
+  return { eye, target, fwd, side, up, f: 1 / Math.tan(CAMERA.fov / 2) };
 }
 
-// Exact perspective projection of a posed model point (matches renderFrame).
-function projectToScreen(posed, out) {
-  const distance = cameraDistance();
-  const x = fit.tx + posed[0] * fit.scale, y = fit.ty + posed[1] * fit.scale, z = posed[2] * fit.scale;
-  const k = distance / (distance - z);
-  out[0] = W / 2 + x * k;
-  out[1] = H / 2 + y * k;
-  return out;
+// World → canvas pixels; returns [x, y, depth].
+function projectPoint(basis, world) {
+  const q = world.map((value, i) => value - basis.eye[i]);
+  const depth = dot(q, basis.fwd);
+  const k = (H / 2) * basis.f / depth;
+  return [W / 2 + k * dot(q, basis.side), H / 2 + k * dot(q, basis.up), depth];
 }
 
-// Calls visit(point, spun) for every drawn feature that can reach the silhouette:
-// surface lattice, plate rim (with ticks) and the two axis extensions.
-function forEachExtremePoint(nu, nvPerTurn, visit) {
-  const U = PARAMS.extent, c = PARAMS.pitch, T = PARAMS.turns;
-  const point = [0, 0, 0];
-  const nv = Math.ceil(nvPerTurn * T);
-  for (let i = -nu; i <= nu; i++) {
-    for (let j = 0; j <= nv; j++) visit(helicoidPoint(U * i / nu, Math.PI * T * (2 * j / nv - 1), c, point), true);
+function freeCamera() {
+  return !isRecording && !Number.isFinite(previewProgress);
+}
+
+// Mouse drag orbits the camera; the automatic spin turns the lantern, so the two never fight.
+function currentCamera() {
+  const cam = { ...frameState.cam };
+  if (freeCamera()) {
+    cam.az += sim.dragYaw;
+    cam.el = clamp(cam.el + sim.dragTilt, -1.2, 1.2);
   }
-  const rim = (PLATE.radius + PLATE.tick) * U, z = plateZ();
-  for (let j = 0; j < PLATE.segments; j++) {
-    const a = TAU * j / PLATE.segments;
-    point[0] = rim * Math.cos(a); point[1] = rim * Math.sin(a); point[2] = z;
-    visit(point, false);
-  }
-  for (const zAxis of [axisTopZ(), axisBottomZ()]) {
-    point[0] = 0; point[1] = 0; point[2] = zAxis;
-    visit(point, false);
-  }
-}
-
-function fitStage() {
-  const key = [PARAMS.pitch, PARAMS.turns, PARAMS.extent, PARAMS.tilt, PARAMS.spinTurns].join();
-  if (key === fit.key) return;
-  const posed = [0, 0, 0];
-  let xLo = Infinity, xHi = -Infinity, yLo = Infinity, yHi = -Infinity, extent = 0;
-  for (let k = 0; k < STAGE.fitSamples; k++) {
-    computeFrameState(k / STAGE.fitSamples);
-    forEachExtremePoint(12, 72, (point, spun) => {
-      posePoint(point, posed, spun);
-      xLo = Math.min(xLo, posed[0]); xHi = Math.max(xHi, posed[0]);
-      yLo = Math.min(yLo, posed[1]); yHi = Math.max(yHi, posed[1]);
-      extent = Math.max(extent, Math.abs(posed[2]));
-    });
-  }
-  // 0.94 leaves room for perspective growth of the near side (the audit measures the true bbox).
-  const boxW = STAGE.right - STAGE.left, boxH = STAGE.bottom - STAGE.top;
-  fit.scale = 0.94 * Math.min(boxW / (xHi - xLo), boxH / (yHi - yLo));
-  fit.tx = (STAGE.left + STAGE.right) / 2 - W / 2 - fit.scale * (xLo + xHi) / 2;
-  fit.ty = (STAGE.top + STAGE.bottom) / 2 - H / 2 - fit.scale * (yLo + yHi) / 2;
-  fit.depthSpan = 2.2 * fit.scale * extent;
-  fit.key = key;
+  return cam;
 }
 
 // ================================================================
-// SURFACE MESH + SHADERS
+// MESH CACHE + SHADERS
 // ================================================================
 
-// (s, t) lattice on [0, 1]²: u = U(2s − 1), v = πT(2t − 1). Pitch, turns and extent are uniforms,
-// so the mesh is built once per resolution. The u lattice is symmetric, so the half-turn maps
-// vertices onto vertices.
-function buildHelicoidMesh(rows) {
-  const cols = LIMITS.colsPerRow * rows;
+// Flat-shaded unit lantern (R = H = 1): three unshared vertices per face carry the face normal
+// and barycentric uv corners (1,0), (0,1), (0,0) for the edge lines. R and H are applied in the
+// vertex shader, so only N and M ever rebuild a mesh.
+function buildLanternGeometry(N, M) {
   const geometry = new p5.Geometry();
-  geometry.gid = `helicoid-${rows}`;
-  for (let j = 0; j <= rows; j++) {
-    for (let i = 0; i <= cols; i++) geometry.vertices.push(new p5.Vector(j / rows, i / cols, 0));
-  }
-  const row = cols + 1;
-  for (let j = 0; j < rows; j++) {
-    for (let i = 0; i < cols; i++) {
-      const a = j * row + i;
-      geometry.faces.push([a, a + row, a + row + 1], [a, a + row + 1, a + 1]);
+  geometry.gid = `lantern-${N}x${M}`;
+  const vertices = lanternVertices(N, M, 1, 1);
+  const faces = lanternFaces(N, M);
+  const corner = (index) => [vertices[3 * index], vertices[3 * index + 1], vertices[3 * index + 2]];
+  for (let f = 0; f < faces.length; f += 3) {
+    const a = corner(faces[f]), b = corner(faces[f + 1]), c = corner(faces[f + 2]);
+    const n = normalize3(cross(b.map((v, i) => v - a[i]), c.map((v, i) => v - a[i])));
+    for (const p of [a, b, c]) {
+      geometry.vertices.push(new p5.Vector(p[0], p[1], p[2]));
+      geometry.vertexNormals.push(new p5.Vector(n[0], n[1], n[2]));
     }
+    geometry.uvs.push(1, 0, 0, 1, 0, 0);
+    geometry.faces.push([f, f + 1, f + 2]);
   }
   return geometry;
+}
+
+// Smooth reference cylinder, also on the unit scale.
+function buildCylinderGeometry(segments) {
+  const geometry = new p5.Geometry();
+  geometry.gid = `reference-cylinder-${segments}`;
+  for (let i = 0; i <= segments; i++) {
+    const theta = TAU * i / segments;
+    for (const z of [-0.5, 0.5]) {
+      geometry.vertices.push(new p5.Vector(Math.cos(theta), Math.sin(theta), z));
+      geometry.vertexNormals.push(new p5.Vector(Math.cos(theta), Math.sin(theta), 0));
+      geometry.uvs.push(i / segments, z + 0.5);
+    }
+  }
+  for (let i = 0; i < segments; i++) {
+    const a = 2 * i;
+    geometry.faces.push([a, a + 2, a + 3], [a, a + 3, a + 1]);
+  }
+  return geometry;
+}
+
+const meshCache = new Map();
+
+function meshKeyOf(step) {
+  return `${step[0]}x${step[1]}`;
+}
+
+// Builds every (N, M) the loop needs and frees the rest — nothing rebuilds per frame.
+function syncMeshCache() {
+  const wanted = new Map(activeSteps().map((step) => [meshKeyOf(step), step]));
+  for (const [key, geometry] of meshCache) {
+    if (!wanted.has(key)) {
+      freeGeometry(geometry);
+      meshCache.delete(key);
+    }
+  }
+  for (const [key, step] of wanted) {
+    if (!meshCache.has(key)) meshCache.set(key, buildLanternGeometry(step[0], step[1]));
+  }
+}
+
+function cachedTriangles() {
+  let total = 0;
+  for (const geometry of meshCache.values()) total += geometry.faces.length;
+  return total;
 }
 
 const SURFACE_VERTEX = `#version 300 es
 precision highp float;
 in vec3 aPosition;
+in vec3 aNormal;
+in vec2 aTexCoord;
 uniform mat4 uModelViewMatrix;
 uniform mat4 uProjectionMatrix;
-uniform float uPitch;
-uniform float uTurns;
-uniform float uExtent;
-uniform float uScale;
-uniform float uDistance;
-uniform float uDepthSpan;
+uniform vec3 uScale;
+uniform float uSpin;
 out vec3 vNormal;
 out vec3 vEye;
-out vec3 vUp;
-out vec2 vParam;
-out float vDepth;
+out vec2 vBary;
+out float vZ;
 
-const float PI = 3.141592653589793;
+vec3 toWorld(vec3 p) {
+  float c = cos(uSpin);
+  float s = sin(uSpin);
+  return vec3(c * p.x - s * p.y, -p.z, s * p.x + c * p.y);
+}
 
-// Line-by-line port of helicoidPoint() / helicoidNormal().
 void main() {
-  float u = uExtent * (2.0 * aPosition.x - 1.0);
-  float v = PI * uTurns * (2.0 * aPosition.y - 1.0);
-  float c = uPitch;
-  vec3 p = vec3(u * cos(v), u * sin(v), c * v);
-  vec3 n = vec3(c * sin(v), -c * cos(v), u) / sqrt(c * c + u * u);
-  vec4 eye = uModelViewMatrix * vec4(p * uScale, 1.0);
+  // Diagonal scale (kR, kR, kH): positions scale by it, normals by its inverse (exact for planar faces).
+  vec3 p = toWorld(aPosition * uScale);
+  vec3 n = toWorld(aNormal / uScale);
+  vec4 eye = uModelViewMatrix * vec4(p, 1.0);
   vNormal = mat3(uModelViewMatrix) * n;
-  vUp = mat3(uModelViewMatrix) * vec3(0.0, 0.0, 1.0);
   vEye = eye.xyz;
-  vParam = vec2(u, v);
-  vDepth = clamp(0.5 + (eye.z + uDistance) / uDepthSpan, 0.0, 1.0);
+  vBary = aTexCoord;
+  vZ = aPosition.z + 0.5;
   gl_Position = uProjectionMatrix * eye;
 }
 `;
@@ -337,80 +477,70 @@ const SURFACE_FRAGMENT = `#version 300 es
 precision highp float;
 in vec3 vNormal;
 in vec3 vEye;
-in vec3 vUp;
-in vec2 vParam;
-in float vDepth;
-uniform float uPitch;
-uniform float uTurns;
-uniform float uExtent;
-uniform vec3 uBg;
+in vec2 vBary;
+in float vZ;
+uniform vec3 uBase;
 uniform vec3 uInk;
-uniform vec3 uCharcoal;
-uniform vec3 uMuted;
-uniform vec3 uCobalt;
+uniform vec3 uRefColor;
 uniform float uLight;
-uniform float uHelixStep;
-uniform float uRulingStep;
-uniform float uLevel;
-uniform float uLevelVisible;
-uniform float uNetOn;
-uniform float uContourOn;
+uniform float uSurf;
+uniform float uWire;
+uniform float uAlpha;
+uniform float uPass;
+uniform float uRef;
+uniform float uFogNear;
+uniform float uFogFar;
 out vec4 outColor;
 
-const float PI = 3.141592653589793;
-
-// Antialiased iso-line of g, about 1 px wide; fades where lines crowd closer than ~3 px.
-float gridLine(float g, float width) {
-  float w = max(fwidth(g), 1e-6);
-  float d = abs(fract(g + 0.5) - 0.5) / w;
-  return (1.0 - smoothstep(0.5 * width, 0.5 * width + 0.8, d)) * (1.0 - smoothstep(0.25, 0.5, w));
-}
-
-// A single line where g = target.
-float levelLine(float g, float target, float width) {
-  float d = abs(g - target) / max(fwidth(g), 1e-6);
-  return 1.0 - smoothstep(0.5 * width, 0.5 * width + 0.9, d);
-}
-
 void main() {
-  // Orientation-free shading: the half-turn symmetry flips N, so only the viewer-facing normal
-  // and the world axis may decide the colour (otherwise the loop seam would swap the sides).
   vec3 n = normalize(vNormal);
   vec3 v = normalize(-vEye);
-  if (dot(n, v) < 0.0) n = -n;
-  float upward = smoothstep(-0.35, 0.35, dot(n, normalize(vUp)));
-  vec3 key = normalize(vec3(-0.5, -0.75, 0.62));
-  vec3 fill = normalize(vec3(0.75, 0.2, 0.6));
+  bool front = dot(n, v) > 0.0;
+  // Pass 0: interior (back-facing) fragments; pass 1: exterior.
+  if ((uPass > 0.5) != front) discard;
+  if (!front) n = -n;
+  float side = front ? 1.0 : 0.0;
+
+  vec3 key = normalize(vec3(-0.55, -0.7, 0.75));
+  vec3 fill = normalize(vec3(0.8, 0.35, 0.45));
   float diffuse = max(dot(n, key), 0.0);
   float soft = max(dot(n, fill), 0.0);
-  float spec = pow(max(dot(reflect(-key, n), v), 0.0), 36.0);
-  float rim = pow(1.0 - max(dot(n, v), 0.0), 2.5);
+  float spec = pow(max(dot(reflect(-key, n), v), 0.0), 42.0);
+  float rim = pow(1.0 - max(dot(n, v), 0.0), 3.0);
+  float shade = uLight * (0.08 + 0.62 * diffuse + 0.18 * soft);
 
-  // Charcoal where the sheet faces up the axis, near-black where it faces down; restrained light.
-  vec3 base = mix(uInk, uCharcoal, upward);
-  vec3 color = mix(base, uMuted, uLight * (0.34 * diffuse + 0.1 * soft) * (0.6 + 0.4 * upward));
+  float a;
+  vec3 color;
+  if (uRef > 0.5) {
+    // Reference cylinder: a faint glass sheath — silhouette rim plus the rings z = 0, H/4, …, H.
+    float w = max(fwidth(vZ * 4.0), 1e-5);
+    float ring = 1.0 - smoothstep(0.4, 1.2, abs(fract(vZ * 4.0 + 0.5) - 0.5) / w);
+    a = (0.05 + 0.4 * rim + 0.35 * ring) * mix(0.45, 1.0, side);
+    color = uRefColor * a;
+  } else {
+    // Edge lines from barycentrics; they fade where a facet is under ~3 px across.
+    vec3 b = vec3(vBary, 1.0 - vBary.x - vBary.y);
+    vec3 fw = max(fwidth(b), vec3(1e-5));
+    vec3 d = b / fw;
+    float edge = 1.0 - smoothstep(0.35, 1.1, min(min(d.x, d.y), d.z));
+    float crowd = 1.0 - smoothstep(0.22, 0.5, max(max(fw.x, fw.y), fw.z));
+    float wireA = edge * crowd * uWire * mix(0.55, 0.9, side);
+    vec3 wireC = uInk * (0.35 + 0.65 * shade) * mix(0.7, 1.0, side);
 
-  float u = vParam.x;
-  float z = uPitch * vParam.y;
+    // Where edges crowd out, wire mode falls back to a faint tone so the mesh never vanishes.
+    float surfA = max(uSurf, uWire * (1.0 - crowd) * 0.4) * mix(0.8, 1.0, side);
+    vec3 surfC = uBase * shade * mix(0.62, 0.8, side);
+    surfC += uInk * (0.45 * spec + 0.1 * rim) * uLight * side;
 
-  // Helices u = const (concentric with the plate circles); u = 0 is the axis itself.
-  float helix = gridLine(u / uHelixStep, 1.0) * uNetOn;
-  color = mix(color, uMuted, 0.72 * helix);
-
-  // Rulings z = const — the straight lines of the ruled surface — with the screw-phase emphasis.
-  float near = uLevelVisible * exp(-pow((z - uLevel) / (1.1 * uRulingStep), 2.0));
-  float ruling = gridLine(z / uRulingStep, 1.0 + 0.9 * near) * (0.38 + 0.62 * near);
-  float sweep = uLevelVisible * levelLine(z, uLevel, 2.4);
-  color = mix(color, uCobalt, uContourOn * max(0.9 * ruling, sweep));
-
-  // Open boundary: the two outer helices |u| = U and the two end rulings |v| = πT.
-  float edge = max(levelLine(abs(u), uExtent, 1.3), levelLine(abs(vParam.y), PI * uTurns, 1.3));
-  color = mix(color, uBg, 0.85 * edge);
-
-  color += vec3(0.16 * spec * uLight + 0.05 * rim);
-  // Faint aerial perspective toward the paper.
-  color = mix(color, uBg, 0.14 * (1.0 - vDepth));
-  outColor = vec4(clamp(color, 0.0, 1.0), 1.0);
+    // Premultiplied: wire layer over surface layer (p5 blends ONE, ONE_MINUS_SRC_ALPHA).
+    a = wireA + surfA * (1.0 - wireA);
+    color = wireC * wireA + min(surfC, vec3(1.0)) * surfA * (1.0 - wireA);
+  }
+  float fog = mix(0.35, 1.0, 1.0 - smoothstep(uFogNear, uFogFar, -vEye.z));
+  a *= fog * uAlpha;
+  color *= fog * uAlpha;
+  if (a < 0.004) discard;
+  outColor = vec4(min(color, vec3(a)), a);
 }
 `;
 
@@ -418,8 +548,7 @@ let canvasEl;
 let grainPg;
 let hudPg;
 let surfaceShader;
-let helicoidMesh;
-let meshKey = "";
+let referenceMesh = null;
 let loopProgress = 0;
 let phase = 0;
 let muxer = null;
@@ -433,13 +562,16 @@ const sim = {
   playhead: 0,
   dragYaw: 0,
   dragTilt: 0,
-  layers: { net: true, contours: true, plate: true, notes: true, math: true },
+  surf: 0.55,
+  wire: 1,
+  ref: 0,
+  layers: { chart: true, facet: true, math: true, loupe: true },
   frameCost: 0,
 };
 
 function setup() {
   createCanvas(W, H, WEBGL);
-  // Multisampling for the shaded silhouette; size and density are untouched.
+  // Multisampling for the faceted silhouette; size and density are untouched.
   setAttributes("antialias", true);
   canvasEl = drawingContext.canvas;
   pixelDensity(1);
@@ -452,112 +584,16 @@ function setup() {
   bakeGrain();
   applyUrlParams();
   surfaceShader = createShader(SURFACE_VERTEX, SURFACE_FRAGMENT);
-  rebuildMesh();
-  fitStage();
-  rebuildPlate();
+  referenceMesh = buildCylinderGeometry(128);
+  syncMeshCache();
   bindUI();
   updateStaticUI();
   syncControls();
-  if (auditParam !== null) window.helicoidAudit = runAudit();
-  window.helicoid = { PARAMS, frameState, fit, computeFrameState, helicoidPoint, setLoop, runAudit };
-}
-
-function rebuildMesh() {
-  const rows = clamp(Math.round(PARAMS.rows), LIMITS.minRows, LIMITS.maxRows);
-  const key = `${rows}`;
-  if (key === meshKey) return;
-  if (helicoidMesh) freeGeometry(helicoidMesh);
-  helicoidMesh = buildHelicoidMesh(rows);
-  meshKey = key;
-}
-
-// ================================================================
-// SACRED-GEOMETRY PLATE — stroke geometry built once per parameter set
-// ================================================================
-// Concentric circles r = kU / helices (the shadows of the helices), the 1.16 U rim with
-// 4 × divisions ticks, `divisions` evenly spaced radii and a hexagram {6/2} inscribed in r = U.
-
-const plate = { key: "", rings: null, rim: null, spokes: null, star: null };
-
-function circleSegments(list, radius, z) {
-  for (let j = 0; j < PLATE.segments; j++) {
-    const a0 = TAU * j / PLATE.segments, a1 = TAU * (j + 1) / PLATE.segments;
-    list.push(radius * Math.cos(a0), radius * Math.sin(a0), z, radius * Math.cos(a1), radius * Math.sin(a1), z);
-  }
-}
-
-// Each layer is tessellated once into a p5.Geometry (strokes only) and replayed with model(), so the
-// per-frame cost is one draw per layer instead of re-tessellating ~2,200 stroke vertices.
-const PLATE_LAYERS = {
-  rings: [INK, 70, 0.9],
-  spokes: [INK, 55, 0.8],
-  star: [MUTED, 200, 1],
-  rim: [INK, 170, 1],
-};
-
-function plateLineLists() {
-  const U = PARAMS.extent, z = plateZ(), rim = PLATE.radius * U;
-  const lists = { rings: [], spokes: [], star: [], rim: [] };
-  for (let k = 1; k <= PARAMS.helices; k++) circleSegments(lists.rings, U * k / PARAMS.helices, z);
-  circleSegments(lists.rings, U, halfHeight()); // top rim of the cylinder carrying the outer helices
-  circleSegments(lists.rim, rim, z);
-  const ticks = 4 * PARAMS.divisions;
-  for (let k = 0; k < ticks; k++) {
-    const a = TAU * k / ticks, length = (k % 4 === 0 ? 1 : 0.45) * PLATE.tick * U;
-    lists.rim.push(rim * Math.cos(a), rim * Math.sin(a), z, (rim + length) * Math.cos(a), (rim + length) * Math.sin(a), z);
-  }
-  const inner = U / PARAMS.helices;
-  for (let k = 0; k < PARAMS.divisions; k++) {
-    const a = TAU * k / PARAMS.divisions;
-    lists.spokes.push(inner * Math.cos(a), inner * Math.sin(a), z, rim * Math.cos(a), rim * Math.sin(a), z);
-  }
-  for (let k = 0; k < 6; k++) {
-    const a0 = HALF_PI + TAU * k / 6, a1 = HALF_PI + TAU * (k + 2) / 6;
-    lists.star.push(U * Math.cos(a0), U * Math.sin(a0), z, U * Math.cos(a1), U * Math.sin(a1), z);
-  }
-  return lists;
-}
-
-// Must run after fitStage(): the geometry is baked at the fitted pixel scale.
-function rebuildPlate() {
-  const key = [PARAMS.pitch, PARAMS.turns, PARAMS.extent, PARAMS.helices, PARAMS.divisions, fit.scale].join();
-  if (key === plate.key) return;
-  const lists = plateLineLists(), s = fit.scale;
-  for (const [name, [colorValue, alpha]] of Object.entries(PLATE_LAYERS)) {
-    if (plate[name]) freeGeometry(plate[name]);
-    const list = lists[name];
-    plate[name] = buildGeometry(() => {
-      noFill();
-      stroke(colorValue.r, colorValue.g, colorValue.b, alpha);
-      beginShape(LINES);
-      for (let i = 0; i < list.length; i += 3) vertex(list[i] * s, list[i + 1] * s, list[i + 2] * s);
-      endShape();
-    });
-  }
-  plate.key = key;
-}
-
-function drawPlate() {
-  const s = fit.scale, U = PARAMS.extent, z = plateZ() * s;
-  // push/pop: noFill() must not leak into the surface's model() fill pass.
-  push();
-  noFill();
-  if (sim.layers.plate) {
-    for (const [name, [colorValue, alpha, weight]] of Object.entries(PLATE_LAYERS)) {
-      stroke(colorValue.r, colorValue.g, colorValue.b, alpha);
-      strokeWeight(weight);
-      model(plate[name]);
-    }
-  }
-  // Shadow of the cobalt ruling: the diameter at angle v + spin, v = z / c.
-  const alpha = 255 * frameState.levelVisible;
-  if (alpha >= 2) {
-    const r = U * s, a = frameState.rulingAngle;
-    stroke(COBALT.r, COBALT.g, COBALT.b, alpha);
-    strokeWeight(2);
-    line(-r * Math.cos(a), -r * Math.sin(a), z, r * Math.cos(a), r * Math.sin(a), z);
-  }
-  pop();
+  if (auditParam !== null) window.lanternAudit = runAudit();
+  window.lantern = {
+    PARAMS, PRESETS, frameState, computeFrameState, stepState, lanternArea, cylinderArea, areaRatio,
+    lanternFaces, lanternVertices, regimeLimit, cameraBasis, projectPoint, toWorld, setLoop, runAudit, meshCache,
+  };
 }
 
 // ================================================================
@@ -568,436 +604,677 @@ function colorVector(colorValue) {
   return [colorValue.r / 255, colorValue.g / 255, colorValue.b / 255];
 }
 
+// Free play eases between modes; recording and ?preview use the pure function of p.
+function updateModeMix() {
+  if (!freeCamera()) {
+    sim.surf = frameState.surf;
+    sim.wire = frameState.wire;
+    sim.ref = frameState.ref;
+    return;
+  }
+  const k = 1 - Math.exp(-Math.min(deltaTime, 100) / 1000 / 0.3);
+  sim.surf += (frameState.surf - sim.surf) * k;
+  sim.wire += (frameState.wire - sim.wire) * k;
+  sim.ref += (frameState.ref - sim.ref) * k;
+}
+
 function renderFrame() {
   background(BG.r, BG.g, BG.b);
   computeFrameState(loopProgress);
-  const free = !isRecording && !Number.isFinite(previewProgress);
-  if (free) {
-    frameState.yaw += sim.dragYaw;
-    frameState.tilt += sim.dragTilt;
-  }
-  const distance = cameraDistance();
-  perspective(STAGE.fov, W / H, distance * 0.5, distance * 2);
-  camera(0, 0, distance, 0, 0, 0, 0, 1, 0);
-
-  push();
-  translate(fit.tx, fit.ty, 0);
-  rotateY(frameState.yaw);
-  // Z (the screw axis) points up the screen, tipped toward the viewer by the elevation.
-  rotateX(HALF_PI - frameState.tilt);
-
-  // Static plate and axis extensions (the surface itself carries the axis between its ends).
-  drawPlate();
-  stroke(INK.r, INK.g, INK.b, 150);
-  strokeWeight(1.2);
-  const s = fit.scale;
-  line(0, 0, halfHeight() * s, 0, 0, axisTopZ() * s);
-  line(0, 0, axisBottomZ() * s, 0, 0, -halfHeight() * s);
-
-  rotateZ(frameState.spin);
-  noStroke();
-  shader(surfaceShader);
-  surfaceShader.setUniform("uPitch", PARAMS.pitch);
-  surfaceShader.setUniform("uTurns", PARAMS.turns);
-  surfaceShader.setUniform("uExtent", PARAMS.extent);
-  surfaceShader.setUniform("uScale", fit.scale);
-  surfaceShader.setUniform("uDistance", distance);
-  surfaceShader.setUniform("uDepthSpan", fit.depthSpan);
-  surfaceShader.setUniform("uBg", colorVector(BG));
-  surfaceShader.setUniform("uInk", colorVector(INK));
-  surfaceShader.setUniform("uCharcoal", colorVector(CHARCOAL));
-  surfaceShader.setUniform("uMuted", colorVector(MUTED));
-  surfaceShader.setUniform("uCobalt", colorVector(COBALT));
-  surfaceShader.setUniform("uLight", PARAMS.light);
-  surfaceShader.setUniform("uHelixStep", PARAMS.extent / PARAMS.helices);
-  surfaceShader.setUniform("uRulingStep", TAU * PARAMS.pitch / PARAMS.rulings);
-  surfaceShader.setUniform("uLevel", frameState.level);
-  surfaceShader.setUniform("uLevelVisible", frameState.levelVisible);
-  surfaceShader.setUniform("uNetOn", sim.layers.net ? 1 : 0);
-  surfaceShader.setUniform("uContourOn", sim.layers.contours ? 1 : 0);
-  model(helicoidMesh);
+  updateModeMix();
+  const fs = frameState;
+  const basis = cameraBasis(currentCamera());
+  perspective(CAMERA.fov, W / H, CAMERA.near, CAMERA.far);
+  // Stroke widths in screen pixels, independent of the small scene units.
+  linePerspective(false);
+  camera(...basis.eye, ...basis.target, ...basis.up);
+  const eyeDistance = Math.hypot(...basis.eye.map((value, i) => value - basis.target[i]));
+  const k = fitScale(PARAMS.R, PARAMS.H);
+  drawLantern(k, eyeDistance * 0.92, eyeDistance * 1.25, sim.ref);
   resetShader();
+  push();
+  drawGuides(k);
   pop();
+  renderLoupe();
+}
+
+// The active mesh (two crossfading meshes around a step change), then the reference sheath.
+function drawLantern(k, fogNear, fogFar, refAlpha) {
+  const fs = frameState;
+  const steps = activeSteps();
+  const layers = fs.mix > 0
+    ? [{ step: steps[fs.stepA], alpha: 1 - fs.mix }, { step: steps[fs.stepB], alpha: fs.mix }]
+    : [{ step: steps[fs.stepA], alpha: 1 }];
+  noStroke();
+  fill(255);
+  shader(surfaceShader);
+  surfaceShader.setUniform("uSpin", fs.spin);
+  surfaceShader.setUniform("uScale", [k * PARAMS.R, k * PARAMS.R, k * PARAMS.H]);
+  surfaceShader.setUniform("uBase", colorVector(CYAN));
+  surfaceShader.setUniform("uInk", colorVector(INK));
+  surfaceShader.setUniform("uRefColor", colorVector(ACID));
+  surfaceShader.setUniform("uLight", PARAMS.light);
+  surfaceShader.setUniform("uSurf", sim.surf);
+  surfaceShader.setUniform("uWire", sim.wire);
+  surfaceShader.setUniform("uFogNear", fogNear);
+  surfaceShader.setUniform("uFogFar", fogFar);
+  surfaceShader.setUniform("uRef", 0);
+  for (const pass of [0, 1]) {
+    surfaceShader.setUniform("uPass", pass);
+    for (const layer of layers) {
+      const mesh = meshCache.get(meshKeyOf(layer.step));
+      if (!mesh || layer.alpha <= 0.002) continue;
+      surfaceShader.setUniform("uAlpha", layer.alpha);
+      model(mesh);
+    }
+  }
+  if (refAlpha > 0.01) {
+    // Inscribed lantern sits inside the sheath: its depth hides the far wall's covered parts.
+    // depthMask is restored right away — background() does not clear a masked depth buffer.
+    drawingContext.depthMask(false);
+    surfaceShader.setUniform("uRef", 1);
+    surfaceShader.setUniform("uAlpha", refAlpha);
+    for (const pass of [0, 1]) {
+      surfaceShader.setUniform("uPass", pass);
+      model(referenceMesh);
+    }
+    drawingContext.depthMask(true);
+  }
+  resetShader();
+}
+
+// LOUPE — at M ≫ N² the folds are thinner than a pixel and the lantern reads as a smooth
+// cylinder. The loupe frames ~10 bands of the wall facing the camera, obliquely, so the
+// pleats that carry the extra area stay visible. Same mesh, same shader, own camera.
+const LOUPE = { x: 190, y: 908, size: 232, fov: 0.5, bands: 10, lean: 1.2, lift: 0 };
+
+function loupeView() {
+  const fs = frameState;
+  const k = fitScale(PARAMS.R, PARAMS.H);
+  const steps = activeSteps();
+  const m = Math.exp(lerp1(Math.log(steps[fs.stepA][1]), Math.log(steps[fs.stepB][1]), fs.mix));
+  const patch = clamp(LOUPE.bands * k * PARAMS.H / m, 0.05, 0.7);
+  const basis = cameraBasis(currentCamera());
+  const out = normalize3([basis.eye[0], 0, basis.eye[2]]);
+  const tangent = [out[2], 0, -out[0]];
+  const spot = out.map((value) => value * k * PARAMS.R);
+  const dir = normalize3([0, 1, 2].map((i) => out[i] + LOUPE.lean * tangent[i] + (i === 1 ? LOUPE.lift : 0)));
+  const dist = (patch / 2) / Math.tan(LOUPE.fov / 2);
+  const eye = spot.map((value, i) => value + dir[i] * dist);
+  const main = projectPoint(basis, spot);
+  const mainPx = (H / 2) * basis.f / main[2];
+  return { k, patch, spot, eye, dist, main, mainPx, mag: LOUPE.size / patch / mainPx };
+}
+
+let loupeFb = null;
+
+function renderLoupe() {
+  if (!sim.layers.loupe) return;
+  if (!loupeFb) loupeFb = createFramebuffer({ width: LOUPE.size, height: LOUPE.size, density: 1, antialias: true });
+  const view = loupeView();
+  loupeFb.begin();
+  background(BG.r, BG.g, BG.b);
+  perspective(LOUPE.fov, 1, view.dist * 0.2, view.dist * 20);
+  camera(...view.eye, ...view.spot, 0, 1, 0);
+  drawLantern(view.k, 1e6, 2e6, 0);
+  loupeFb.end();
+}
+
+// The highlighted facet: up-triangle j = 0 in the middle band, in lantern coordinates.
+function facetCorners(N, M, R, Hc) {
+  const k = Math.floor(M / 2);
+  return [ringPoint(0, k, N, M, R, Hc), ringPoint(1, k, N, M, R, Hc), ringPoint(k % 2, k + 1, N, M, R, Hc)];
+}
+
+// Axis, cylinder rims and one outlined facet — strokes, so they stay crisp at any density.
+function drawGuides(k) {
+  const fs = frameState;
+  const R = PARAMS.R, Hc = PARAMS.H;
+  noFill();
+  stroke(INK.r, INK.g, INK.b, 70);
+  strokeWeight(1.2);
+  line(0, -k * Hc * 0.5, 0, 0, k * Hc * 0.5, 0);
+  if (sim.ref > 0.01) {
+    for (const z of [-Hc / 2, Hc / 2]) {
+      stroke(ACID.r, ACID.g, ACID.b, 200 * sim.ref);
+      strokeWeight(2);
+      beginShape();
+      for (let i = 0; i <= 128; i++) vertex(...toWorld([R * Math.cos(TAU * i / 128), R * Math.sin(TAU * i / 128), z], fs.spin, k));
+      endShape();
+    }
+  }
+  if (!sim.layers.facet) return;
+  const [N, M] = shownStep();
+  const lift = 1.006;
+  stroke(ACID.r, ACID.g, ACID.b, 235);
+  strokeWeight(2.4);
+  beginShape();
+  for (const p of [...facetCorners(N, M, R, Hc), facetCorners(N, M, R, Hc)[0]]) {
+    vertex(...toWorld([p[0] * lift, p[1] * lift, p[2]], fs.spin, k));
+  }
+  endShape();
 }
 
 // ================================================================
-// HUD — Neo-Swiss editorial layer (existing fonts and size scale: 72 / 34 / 28 / 26 / 23 / 22)
+// HUD
 // ================================================================
 
-function pad2(value) {
-  return String(value).padStart(2, "0");
+const OVERLAY = {
+  hook: true,
+  captions: [
+    { window: null, first: "A CYLINDER BUILT FROM FLAT TRIANGLES", second: "EVERY VERTEX LIES ON THE CYLINDER" },
+    { window: [0.07, 0.1, 0.3, 0.33], first: "REFINE: N AROUND · M UP · T = 2NM", second: () => `${presetName()} — ${presetLaw()}` },
+    { window: [0.33, 0.36, 0.55, 0.58], first: "THE MESH CLOSES IN ON THE CYLINDER", second: "MAX GAP R(1 − cos π/N) → 0" },
+    { window: [0.6, 0.63, 0.77, 0.8], first: () => revealLine(0), second: () => revealLine(1) },
+    { window: [0.82, 0.85, 0.92, 0.95], first: "SHAPE CONVERGES · AREA NEED NOT", second: "THE FOLDS STEEPEN WHEN M ≫ N²" },
+  ],
+};
+
+function presetName() {
+  return PARAMS.preset === "manual" ? "MANUAL" : PRESETS[PARAMS.preset].name;
 }
 
-function turnsLabel(turns) {
-  return Number.isInteger(turns) ? `${turns}` : turns.toFixed(1);
+function presetLaw() {
+  if (PARAMS.preset !== "manual") return PRESETS[PARAMS.preset].law;
+  return `N = ${PARAMS.N} · M = ${PARAMS.M}`;
 }
 
-function piMultiple(value) {
-  if (value === 0) return "0";
-  if (value === 1) return "π";
-  if (value === -1) return "−π";
-  return `${value < 0 ? "−" : ""}${turnsLabel(Math.abs(value))}π`;
+function presetLimit() {
+  if (PARAMS.preset !== "manual") return PRESETS[PARAMS.preset].limit;
+  return `M/N² = ${(PARAMS.M / PARAMS.N ** 2).toFixed(3)}`;
 }
 
-function hudText() {
-  const c = PARAMS.pitch, T = PARAMS.turns;
+function revealLine(index) {
+  const key = PARAMS.preset;
+  if (key === "A") return ["AREA → 2πRH: BOTH SHAPE AND AREA CONVERGE", "M/N² → 0 KEEPS THE FACETS UPRIGHT"][index];
+  if (key === "B") return [`AREA → ${regimeLimit("B", PARAMS.R, PARAMS.H).toFixed(3)} × 2πRH`, "A FINITE LIMIT — AND THE WRONG ONE"][index];
+  if (key === "C") return ["AREA RATIO GROWS WITHOUT BOUND", "SAME CYLINDER · UNBOUNDED AREA"][index];
+  const ratio = areaRatio(PARAMS.N, PARAMS.M, PARAMS.R, PARAMS.H);
+  return [`A / 2πRH = ${ratio.toFixed(4)}`, `M/N² = ${(PARAMS.M / PARAMS.N ** 2).toFixed(3)}`][index];
+}
+
+function captionText(value) {
+  return typeof value === "function" ? value() : value;
+}
+
+const HUD_TEXT = {
+  title: "SCHWARZ LANTERN",
+  subtitle: "A PARADOX OF SURFACE AREA",
+  formula: "θ(j,k) = 2πj/N + (k mod 2)π/N · z = −H/2 + kH/M",
+  condition: "T = 2NM  ·  A_cyl = 2πRH",
+  citation: "A = 2MNR sin(π/N) √[(H/M)² + R²(1 − cos π/N)²]",
+};
+
+function readoutText(N) {
+  return `MAX GAP R(1 − cos π/N) = ${maxGap(N, PARAMS.R).toFixed(4)}`;
+}
+
+function formatInt(value) {
+  return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
+function dataRows(N, M) {
+  const R = PARAMS.R, Hc = PARAMS.H;
+  const ratio = areaRatio(N, M, R, Hc);
+  const error = (ratio - 1) * 100;
   return {
-    header: "MATHEMATICAL STUDIES / 002",
-    headerRight: `HELICOID / 0${pad2(presetIndex + 1)}`,
-    title: ["HELICOID", "INFINITE"],
-    column: [
-      ["SPIRAL GEOMETRY", 26, INK],
-      [`PITCH c = ${c.toFixed(3)} / ${turnsLabel(T)} TURNS`, 22, INK],
-      ["MEAN CURVATURE / H = 0", 22, CHARCOAL],
-      ["GAUSSIAN CURVATURE / K < 0", 22, CHARCOAL],
+    left: [
+      ["ANGULAR SEGMENTS", `N = ${N}`],
+      ["VERTICAL LAYERS", `M = ${M}`],
+      ["TRIANGLE COUNT", `T = ${formatInt(triangleCount(N, M))}`],
+      ["M / N²", (M / (N * N)).toFixed(3)],
     ],
-    weierstrass: "PARAMETRIC SURFACE X(u, v)",
-    integral: "x = u cos v · y = u sin v · z = c v",
-    data: `|v| ≤ ${piMultiple(T)}   |u| ≤ ${PARAMS.extent.toFixed(2)}`,
-    legend: [
-      [MUTED, "HELICES / u = const", `r = kU / ${PARAMS.helices} · ${PARAMS.divisions} DIVISIONS`],
-      [COBALT, "RULINGS / z = const", `${PARAMS.rulings} PER TURN · 2πc RISE`],
+    right: [
+      ["MESH AREA", lanternArea(N, M, R, Hc).toFixed(3)],
+      ["CYLINDER AREA", cylinderArea(R, Hc).toFixed(3)],
+      ["AREA RATIO", ratio.toFixed(4)],
+      ["AREA ERROR", `${error >= 0 ? "+" : "−"}${Math.abs(error).toFixed(2)}%`],
     ],
-    citation: `K = −c² / (c² + u²)² · ${meshLabel()}`,
-    citationRight: `${MAX_DURATION} S / ${LOOP_FRAMES} F`,
-    axis: "SCREW AXIS",
   };
 }
 
-function meshLabel() {
-  const rows = Math.round(PARAMS.rows);
-  return `${rows} × ${LIMITS.colsPerRow * rows} MESH`;
+function drawDataColumns(graphics) {
+  const [N, M] = shownStep();
+  const rows = dataRows(N, M);
+  graphics.textFont("monospace");
+  graphics.textStyle(NORMAL);
+  const column = (list, x, align) => {
+    graphics.textAlign(align, TOP);
+    list.forEach(([label, value], i) => {
+      const y = HUD.dataY + i * HUD.dataRow;
+      graphics.textSize(22);
+      graphics.fill(INK.r, INK.g, INK.b, 150);
+      graphics.text(label, x, y);
+      graphics.textSize(26);
+      const highlight = label === "AREA RATIO" || label === "AREA ERROR";
+      if (highlight) graphics.fill(ACID.r, ACID.g, ACID.b, 240);
+      else graphics.fill(INK.r, INK.g, INK.b, 235);
+      graphics.text(value, x, y + 26);
+    });
+  };
+  column(rows.left, HUD.stageTextX, LEFT);
+  column(rows.right, W - HUD.stageTextX, RIGHT);
 }
 
-function setType(graphics, font, style, size) {
-  graphics.textFont(font);
-  graphics.textStyle(style);
-  graphics.textSize(size);
+// A / 2πRH against N for the three laws. Solid where meshes are rendered, dotted beyond
+// (computed only); the dot rides the active preset's steps.
+function chartFrame() {
+  const R = PARAMS.R, Hc = PARAMS.H;
+  const lo = Math.min(areaRatio(CHART.nMin, Math.max(1, PRESETS.A.m(CHART.nMin)), R, Hc), 1) * 0.97;
+  const hi = Math.max(areaRatio(CHART.nMax, PRESETS.C.m(CHART.nMax), R, Hc), regimeLimit("B", R, Hc) * 1.2);
+  const x = (n) => lerp1(CHART.x0, CHART.x1, Math.log(n / CHART.nMin) / Math.log(CHART.nMax / CHART.nMin));
+  const y = (ratio) => lerp1(CHART.y1, CHART.y0, Math.log(ratio / lo) / Math.log(hi / lo));
+  return { x, y, lo, hi };
 }
 
-function fillColor(graphics, colorValue, alpha) {
-  graphics.fill(colorValue.r, colorValue.g, colorValue.b, alpha);
+function drawChart(graphics) {
+  if (!sim.layers.chart) return;
+  const R = PARAMS.R, Hc = PARAMS.H;
+  const frame = chartFrame();
+  graphics.textFont("monospace");
+  graphics.textStyle(NORMAL);
+  graphics.textSize(22);
+  graphics.noStroke();
+  graphics.textAlign(LEFT, CENTER);
+  graphics.fill(INK.r, INK.g, INK.b, 150);
+  graphics.text("A / 2πRH  vs  N", HUD.stageTextX, CHART.headerY);
+  // Legend: active preset in ACID.
+  graphics.textAlign(RIGHT, CENTER);
+  let x = CHART.x1;
+  for (const key of [...PRESET_KEYS].reverse()) {
+    const limit = regimeLimit(key, R, Hc);
+    const label = `${key} → ${Number.isFinite(limit) ? limit.toFixed(limit === 1 ? 0 : 3) : "∞"}`;
+    if (key === PARAMS.preset) graphics.fill(ACID.r, ACID.g, ACID.b, 240);
+    else graphics.fill(INK.r, INK.g, INK.b, 150);
+    graphics.text(label, x, CHART.headerY);
+    x -= graphics.textWidth(label) + 28;
+  }
+  // Axes: ratio = 1 (the true area) dashed, N ticks.
+  graphics.stroke(INK.r, INK.g, INK.b, 60);
+  graphics.strokeWeight(1);
+  graphics.line(CHART.x0, CHART.y1, CHART.x1, CHART.y1);
+  const one = frame.y(1);
+  for (let px = CHART.x0; px < CHART.x1; px += 14) graphics.line(px, one, Math.min(px + 7, CHART.x1), one);
+  graphics.noStroke();
+  graphics.fill(INK.r, INK.g, INK.b, 150);
+  graphics.textAlign(RIGHT, CENTER);
+  graphics.text("1", CHART.x0 - 14, one);
+  graphics.textAlign(CENTER, TOP);
+  for (const n of [4, 8, 16, 32]) {
+    graphics.stroke(INK.r, INK.g, INK.b, 80);
+    graphics.line(frame.x(n), CHART.y1, frame.x(n), CHART.y1 + 6);
+    graphics.noStroke();
+    graphics.text(n === 4 ? "N 4" : String(n), frame.x(n), CHART.y1 + 9);
+  }
+  for (const key of PRESET_KEYS) {
+    const preset = PRESETS[key];
+    const active = key === PARAMS.preset;
+    const lastN = preset.steps[preset.steps.length - 1][0];
+    const colorValue = active ? ACID : INK;
+    const points = [];
+    for (let i = 0; i <= 120; i++) {
+      const n = CHART.nMin * Math.pow(CHART.nMax / CHART.nMin, i / 120);
+      points.push([frame.x(n), frame.y(Math.min(areaRatio(n, preset.m(n), R, Hc), frame.hi)), n <= lastN + 1e-9]);
+    }
+    graphics.noFill();
+    graphics.stroke(colorValue.r, colorValue.g, colorValue.b, active ? 230 : 95);
+    graphics.strokeWeight(active ? 2.4 : 1.4);
+    for (let i = 1; i < points.length; i++) {
+      // Rendered range solid; computed-only range dotted.
+      if (!points[i][2] && i % 2) continue;
+      graphics.line(points[i - 1][0], points[i - 1][1], points[i][0], points[i][1]);
+    }
+    graphics.noStroke();
+    graphics.fill(colorValue.r, colorValue.g, colorValue.b, active ? 230 : 110);
+    for (const [n, m] of preset.steps) graphics.circle(frame.x(n), frame.y(areaRatio(n, m, R, Hc)), active ? 6 : 4);
+  }
+  // Current mesh: interpolates in (log N, log ratio) during a crossfade.
+  const steps = activeSteps();
+  const fs = frameState;
+  const pa = steps[fs.stepA], pb = steps[fs.stepB];
+  const ra = areaRatio(pa[0], pa[1], R, Hc), rb = areaRatio(pb[0], pb[1], R, Hc);
+  const n = Math.exp(lerp1(Math.log(pa[0]), Math.log(pb[0]), fs.mix));
+  const ratio = Math.exp(lerp1(Math.log(ra), Math.log(rb), fs.mix));
+  const px = frame.x(clamp(n, CHART.nMin, CHART.nMax));
+  const py = frame.y(clamp(ratio, frame.lo, frame.hi));
+  graphics.noFill();
+  graphics.stroke(ACID.r, ACID.g, ACID.b, 240);
+  graphics.strokeWeight(2);
+  graphics.circle(px, py, 18);
+  graphics.noStroke();
+  graphics.fill(INK.r, INK.g, INK.b, 245);
+  graphics.circle(px, py, 8);
 }
 
+// Facet label pinned beside the outlined triangle while it faces the camera.
+function drawFacetLabel(graphics) {
+  if (!sim.layers.facet) return;
+  const [N, M] = shownStep();
+  const R = PARAMS.R, Hc = PARAMS.H;
+  const k = fitScale(R, Hc);
+  const basis = cameraBasis(currentCamera());
+  const corners = facetCorners(N, M, R, Hc).map((p) => toWorld(p, frameState.spin, k));
+  const center = [0, 1, 2].map((i) => (corners[0][i] + corners[1][i] + corners[2][i]) / 3);
+  const radial = normalize3([center[0], 0, center[2]]);
+  const toEye = normalize3(basis.eye.map((value, i) => value - center[i]));
+  const facing = smoothstep(0.15, 0.45, dot(radial, toEye));
+  if (facing <= 0.01) return;
+  // Label parked in the free right column (under the data rows), with a leader to the facet.
+  const p = projectPoint(basis, center);
+  const lx = W - HUD.stageTextX;
+  const ly = clamp(p[1], HUD.dataY + 4 * HUD.dataRow + 50, CHART.headerY - 70);
+  graphics.textFont("monospace");
+  graphics.textStyle(NORMAL);
+  graphics.textSize(22);
+  graphics.textAlign(RIGHT, CENTER);
+  const labelLeft = lx - Math.max(graphics.textWidth(`b ${facetBase(N, R).toFixed(3)}`), graphics.textWidth(`h ${facetHeight(N, M, R, Hc).toFixed(4)}`));
+  graphics.stroke(ACID.r, ACID.g, ACID.b, 150 * facing);
+  graphics.strokeWeight(1);
+  graphics.line(p[0], p[1], labelLeft - 12, ly);
+  graphics.noStroke();
+  graphics.fill(ACID.r, ACID.g, ACID.b, 235 * facing);
+  graphics.text(`b ${facetBase(N, R).toFixed(3)}`, lx, ly - 14);
+  graphics.text(`h ${facetHeight(N, M, R, Hc).toFixed(4)}`, lx, ly + 14);
+}
+
+// Loupe ring, the leader to the magnified spot and the magnification.
+function drawLoupeFrame(graphics) {
+  if (!sim.layers.loupe) return;
+  const view = loupeView();
+  const r = LOUPE.size / 2;
+  const spot = view.main;
+  const ring = Math.max(5, view.patch * view.mainPx / 2);
+  const dx = spot[0] - LOUPE.x, dy = spot[1] - LOUPE.y;
+  const dl = Math.hypot(dx, dy) || 1;
+  graphics.noFill();
+  graphics.stroke(INK.r, INK.g, INK.b, 150);
+  graphics.strokeWeight(1.2);
+  graphics.circle(LOUPE.x, LOUPE.y, LOUPE.size);
+  graphics.stroke(ACID.r, ACID.g, ACID.b, 200);
+  graphics.circle(spot[0], spot[1], 2 * ring);
+  graphics.stroke(INK.r, INK.g, INK.b, 90);
+  graphics.line(LOUPE.x + dx / dl * r, LOUPE.y + dy / dl * r, spot[0] - dx / dl * ring, spot[1] - dy / dl * ring);
+  graphics.noStroke();
+  graphics.textFont("monospace");
+  graphics.textStyle(NORMAL);
+  graphics.textSize(22);
+  graphics.textAlign(CENTER, TOP);
+  graphics.fill(INK.r, INK.g, INK.b, 150);
+  graphics.text(`LOUPE ×${view.mag.toFixed(view.mag < 10 ? 1 : 0)}`, LOUPE.x, LOUPE.y + r + 14);
+}
+
+// HUD — fonts, sizes, hierarchy, and anchors retained from the series.
 function drawScreenFinish() {
   const graphics = hudPg;
-  const text = hudText();
   graphics.clear();
   graphics.image(grainPg, 0, 0);
   drawCornerGuides(graphics);
   graphics.noStroke();
+  graphics.textAlign(CENTER, CENTER);
+  graphics.textFont("Georgia");
+  graphics.textStyle(BOLD);
+  graphics.textSize(72);
+  graphics.fill(INK.r, INK.g, INK.b, 245);
+  graphics.text(HUD_TEXT.title, W / 2, HUD.titleY);
+  graphics.textFont("monospace");
+  graphics.textStyle(NORMAL);
+  graphics.textSize(34);
+  graphics.fill(INK.r, INK.g, INK.b, 228);
+  graphics.text(HUD_TEXT.subtitle, W / 2, HUD.formulaY);
+  graphics.textSize(23);
+  graphics.fill(CYAN.r, CYAN.g, CYAN.b, 220);
+  graphics.text(HUD_TEXT.formula, W / 2, HUD.exponentY);
+  graphics.textSize(26);
+  graphics.fill(INK.r, INK.g, INK.b, 215);
+  graphics.text(HUD_TEXT.condition, W / 2, HUD.subtitleY);
 
-  // Header row + top rule.
-  setType(graphics, "monospace", NORMAL, 22);
   graphics.textAlign(LEFT, TOP);
-  fillColor(graphics, INK, 235);
-  graphics.text(text.header, GRID.left, HUD.headerY);
+  graphics.fill(INK.r, INK.g, INK.b, 235);
+  graphics.text(readoutText(shownStep()[0]), HUD.stageTextX, HUD.stageY);
+  graphics.fill(ACID.r, ACID.g, ACID.b, 240);
   graphics.textAlign(RIGHT, TOP);
-  graphics.text(text.headerRight, GRID.right, HUD.headerY);
-  hairline(graphics, GRID.left, HUD.ruleTopY, GRID.right, HUD.ruleTopY, INK, 200, 1);
-
-  // Title block, flush left on column 0.
-  setType(graphics, "Georgia", BOLD, 72);
-  graphics.textAlign(LEFT, TOP);
-  fillColor(graphics, INK, 250);
-  text.title.forEach((line, i) => graphics.text(line, GRID.left - 4, HUD.titleY + i * HUD.titleLead));
-
-  // Technical column, flush left on column 7.
-  if (sim.layers.notes) {
-    text.column.forEach(([line, size, colorValue], i) => {
-      setType(graphics, "monospace", NORMAL, size);
-      fillColor(graphics, colorValue, 235);
-      graphics.text(line, gridX(7), HUD.columnY + i * HUD.columnLead + (size === 26 ? 0 : 6));
-    });
-  }
-
-  // Loop track.
+  graphics.textSize(22);
+  graphics.text(presetLimit(), W - HUD.rightTextX, HUD.stageY + 3);
   const progress = clamp(Math.round(loopProgress * LOOP_FRAMES) / (LOOP_FRAMES - 1), 0, 1);
-  const indicatorX = GRID.left + (GRID.right - GRID.left) * progress;
-  hairline(graphics, GRID.left, HUD.trackY, GRID.right, HUD.trackY, MUTED, 255, 1);
-  hairline(graphics, GRID.left, HUD.trackY, indicatorX, HUD.trackY, INK, 230, 2);
+  const indicatorX = HUD.safeX + (W - 2 * HUD.safeX) * progress;
+  graphics.stroke(INK.r, INK.g, INK.b, 80);
+  graphics.strokeWeight(1);
+  graphics.line(HUD.safeX, HUD.trackY, W - HUD.safeX, HUD.trackY);
+  graphics.stroke(INK.r, INK.g, INK.b, 184);
+  graphics.strokeWeight(2.2);
+  graphics.line(HUD.safeX, HUD.trackY, indicatorX, HUD.trackY);
   graphics.noStroke();
-  fillColor(graphics, COBALT, 255);
-  graphics.rect(indicatorX - 1, HUD.trackY - 7, 2, 14);
-  setType(graphics, "monospace", NORMAL, 22);
-  graphics.textAlign(LEFT, TOP);
-  fillColor(graphics, CHARCOAL, 220);
-  graphics.text(`t = ${progress.toFixed(3)}`, GRID.left, HUD.readoutY);
-  graphics.textAlign(RIGHT, TOP);
-  graphics.text(`θ(t) = ${PARAMS.spinTurns === 0 ? "0" : `${piMultiple(PARAMS.spinTurns)}t`}`, GRID.right, HUD.readoutY);
+  graphics.fill(INK.r, INK.g, INK.b, 235);
+  graphics.circle(indicatorX, HUD.trackY, 8);
 
-  drawHeightRuler(graphics);
-  drawAxisLabel(graphics, text.axis);
-  drawRegistrationMark(graphics, GRID.right - 14, STAGE.top);
-  drawRegistrationMark(graphics, gridX(0) + 14, HUD.ruleBottomY - 40);
+  if (sim.layers.math) drawDataColumns(graphics);
+  drawChart(graphics);
+  drawFacetLabel(graphics);
+  drawLoupeFrame(graphics);
 
-  // Lower band: equations (columns 0–6) + legend (columns 7–11).
-  hairline(graphics, GRID.left, HUD.ruleBottomY, GRID.right, HUD.ruleBottomY, INK, 200, 1);
   graphics.noStroke();
-  graphics.textAlign(LEFT, TOP);
-  setType(graphics, "monospace", NORMAL, 22);
-  fillColor(graphics, CHARCOAL, 230);
-  graphics.text(text.weierstrass, GRID.left, HUD.formulaY);
-  setType(graphics, "monospace", NORMAL, 34);
-  fillColor(graphics, COBALT, 255);
-  graphics.text(text.data, GRID.left, HUD.formulaY + 32);
-  setType(graphics, "monospace", NORMAL, 23);
-  fillColor(graphics, INK, 235);
-  graphics.text(text.integral, GRID.left, HUD.formulaY + 78);
-
-  if (sim.layers.notes) {
-    text.legend.forEach(([colorValue, label, detail], i) => {
-      const y = HUD.formulaY + i * 52;
-      hairline(graphics, gridX(7), y + 11, gridX(7) + 30, y + 11, colorValue, 255, colorValue === COBALT ? 2.4 : 2);
-      graphics.noStroke();
-      setType(graphics, "monospace", NORMAL, 22);
-      fillColor(graphics, INK, 235);
-      graphics.text(label, gridX(7) + 42, y);
-      fillColor(graphics, CHARCOAL, 200);
-      graphics.text(detail, gridX(7) + 42, y + 24);
-    });
+  graphics.textFont("monospace");
+  graphics.textStyle(NORMAL);
+  graphics.textAlign(CENTER, CENTER);
+  graphics.textSize(28);
+  if (OVERLAY.hook) {
+    const p = loopProgress;
+    for (const caption of OVERLAY.captions) {
+      const weight = caption.window
+        ? envelope(p, caption.window)
+        : 1 - smoothstep(0.04, 0.07, p) + smoothstep(0.95, 0.99, p);
+      if (weight <= 0.01) continue;
+      graphics.fill(INK.r, INK.g, INK.b, HUD.bottomMainAlpha * weight);
+      graphics.text(captionText(caption.first), W / 2, HUD.bottomTextY);
+      graphics.text(captionText(caption.second), W / 2, HUD.bottomTextY + 38);
+    }
   }
-
-  setType(graphics, "monospace", NORMAL, 22);
-  fillColor(graphics, CHARCOAL, 200);
-  graphics.textAlign(LEFT, TOP);
-  graphics.text(text.citation, GRID.left, HUD.citationY);
-  graphics.textAlign(RIGHT, TOP);
-  graphics.text(text.citationRight, GRID.right, HUD.citationY);
+  graphics.textSize(22);
+  graphics.fill(INK.r, INK.g, INK.b, HUD.citationAlpha);
+  graphics.text(HUD_TEXT.citation, W / 2, HUD.citationY);
   compositeHUD(graphics);
 }
 
-function hairline(graphics, x0, y0, x1, y1, colorValue, alpha, weight) {
-  graphics.stroke(colorValue.r, colorValue.g, colorValue.b, alpha);
-  graphics.strokeWeight(weight);
-  graphics.line(x0, y0, x1, y1);
-}
+// ================================================================
+// AUDIT — ?audit=1 checks T = 2NM, the closed-form area against the summed faces, winding,
+// connectivity, isosceles faces, the three regimes, framing, typography fit and the loop seam
+// (report stored on window.lanternAudit).
+// ================================================================
 
-// Z ruler: one tick per quarter turn (Δz = πc/2), longer at half turns, cobalt marker at the
-// climbing ruling.
-function drawHeightRuler(graphics) {
-  const zh = halfHeight();
-  const toY = (z) => RULER.bottom - (RULER.bottom - RULER.top) * (z / zh + 1) / 2;
-  hairline(graphics, RULER.x, RULER.top, RULER.x, RULER.bottom, INK, 200, 1);
-  const quarters = Math.round(2 * PARAMS.turns);
-  for (let i = -quarters; i <= quarters; i++) {
-    const y = toY(i * zh / quarters);
-    const length = i === 0 ? 2 * RULER.tick : (i % 2 === 0 ? 1.5 : 1) * RULER.tick;
-    hairline(graphics, RULER.x - length, y, RULER.x, y, INK, 200, 1);
+function auditMesh(N, M, R, Hc) {
+  const vertices = lanternVertices(N, M, R, Hc);
+  const faces = lanternFaces(N, M);
+  const corner = (index) => [vertices[3 * index], vertices[3 * index + 1], vertices[3 * index + 2]];
+  const edges = new Map();
+  let area = 0, inwardFaces = 0, degenerate = 0, isoscelesError = 0, onCylinderError = 0;
+  for (let f = 0; f < faces.length; f += 3) {
+    const ids = [faces[f], faces[f + 1], faces[f + 2]];
+    const [a, b, c] = ids.map(corner);
+    const n = cross(b.map((v, i) => v - a[i]), c.map((v, i) => v - a[i]));
+    const faceArea = Math.hypot(...n) / 2;
+    area += faceArea;
+    if (faceArea < 1e-14) degenerate++;
+    const centroid = [0, 1, 2].map((i) => (a[i] + b[i] + c[i]) / 3);
+    if (n[0] * centroid[0] + n[1] * centroid[1] <= 0) inwardFaces++;
+    // The base is (a, b) for up faces and (a, b) for down faces: apex c is equidistant.
+    const ca = Math.hypot(...c.map((v, i) => v - a[i])), cb = Math.hypot(...c.map((v, i) => v - b[i]));
+    isoscelesError = Math.max(isoscelesError, Math.abs(ca - cb));
+    for (const p of [a, b, c]) onCylinderError = Math.max(onCylinderError, Math.abs(Math.hypot(p[0], p[1]) - R));
+    for (let e = 0; e < 3; e++) {
+      const u = ids[e], v = ids[(e + 1) % 3];
+      const key = u < v ? `${u}-${v}` : `${v}-${u}`;
+      edges.set(key, (edges.get(key) || 0) + 1);
+    }
   }
-  graphics.noStroke();
-  setType(graphics, "monospace", NORMAL, 22);
-  fillColor(graphics, CHARCOAL, 220);
-  graphics.textAlign(LEFT, BOTTOM);
-  graphics.text("+Z", GRID.left, RULER.top - 12);
-  graphics.textAlign(LEFT, TOP);
-  graphics.text("−Z", GRID.left, RULER.bottom + 12);
-  const alpha = 255 * frameState.levelVisible;
-  if (alpha < 2) return;
-  const y = toY(clamp(frameState.level, -zh, zh));
-  hairline(graphics, RULER.x - 18, y, RULER.x + 18, y, COBALT, alpha, 2.4);
-  graphics.noStroke();
-  fillColor(graphics, COBALT, alpha);
-  graphics.textAlign(LEFT, CENTER);
-  const sign = frameState.level < 0 ? "−" : "+";
-  graphics.text(`${sign}${Math.abs(frameState.level).toFixed(2)}`, RULER.x + 24, y - 1);
-}
-
-// Label at the top of the screw axis, projected with the live pose.
-const axisScratch = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
-const AXIS_LABEL = { dx: 8, dy: -2, height: 24 };
-
-function axisLabelAnchor() {
-  axisScratch[0][0] = 0; axisScratch[0][1] = 0; axisScratch[0][2] = axisTopZ();
-  return projectToScreen(posePoint(axisScratch[0], axisScratch[1], false), axisScratch[2]);
-}
-
-function drawAxisLabel(graphics, label) {
-  if (!sim.layers.notes) return;
-  const screen = axisLabelAnchor();
-  graphics.noStroke();
-  setType(graphics, "monospace", NORMAL, 22);
-  fillColor(graphics, INK, 230);
-  graphics.textAlign(LEFT, BOTTOM);
-  graphics.text(label, screen[0] + AXIS_LABEL.dx, screen[1] + AXIS_LABEL.dy);
-}
-
-function drawRegistrationMark(graphics, x, y) {
-  graphics.noFill();
-  graphics.stroke(INK.r, INK.g, INK.b, 170);
-  graphics.strokeWeight(0.8);
-  graphics.circle(x, y, 14);
-  graphics.line(x - 13, y, x + 13, y);
-  graphics.line(x, y - 13, x, y + 13);
-}
-
-// ================================================================
-// AUDIT — ?audit=1 checks the parametrisation against an independent screw construction, H = 0,
-// the metric, the normal, K, straight rulings, screw and half-turn symmetry, mesh finiteness,
-// framing, typography fit and the loop seam (report stored on window.helicoidAudit).
-// ================================================================
-
-function seededRandom(seed) {
-  return () => {
-    seed |= 0;
-    seed = seed + 0x6D2B79F5 | 0;
-    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
-    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
-    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  let boundaryEdges = 0, interiorEdges = 0, badEdges = 0;
+  for (const count of edges.values()) {
+    if (count === 1) boundaryEdges++;
+    else if (count === 2) interiorEdges++;
+    else badEdges++;
+  }
+  const analytic = lanternArea(N, M, R, Hc);
+  return {
+    N, M, R, H: Hc,
+    triangles: faces.length / 3,
+    expectedTriangles: triangleCount(N, M),
+    summedArea: area,
+    analyticArea: analytic,
+    relativeAreaError: Math.abs(area - analytic) / analytic,
+    inwardFaces, degenerate, isoscelesError, onCylinderError,
+    boundaryEdges, interiorEdges, badEdges,
+    ok: faces.length / 3 === triangleCount(N, M) && Math.abs(area - analytic) / analytic < 1e-10 &&
+      inwardFaces === 0 && degenerate === 0 && isoscelesError < 1e-10 && onCylinderError < 1e-12 &&
+      boundaryEdges === 2 * N && badEdges === 0 && interiorEdges === 3 * N * M - N,
   };
 }
 
-// Independent reference: rotate (u, 0, 0) by v using the half-angle (rational) rotation and lift by cv.
-function helicoidScrew(u, v, c) {
-  const t = Math.tan(v / 2), d = 1 + t * t;
-  return [u * (1 - t * t) / d, u * 2 * t / d, c * v];
-}
-
-function rotateZ3(p, angle) {
-  const c = Math.cos(angle), s = Math.sin(angle);
-  return [c * p[0] - s * p[1], s * p[0] + c * p[1], p[2]];
-}
-
-function auditPreset(params, random) {
-  const { pitch: c, turns: T, extent: U } = params;
-  const report = { pitch: c, turns: T, formulaMax: 0, harmonicMax: 0, metricMax: 0, normalMax: 0, kRelMax: 0, kNonNegative: 0, rulingMax: 0, screwMax: 0, halfTurnMax: 0 };
-  const X = (u, v) => helicoidPoint(u, v, c, [0, 0, 0]);
-  const h = 1e-3;
-  for (let s = 0; s < 120; s++) {
-    const u = U * (2 * random() - 1), v = Math.PI * T * (2 * random() - 1);
-    const p0 = X(u, v);
-    report.formulaMax = Math.max(report.formulaMax, ...helicoidScrew(u, v, c).map((value, i) => Math.abs(value - p0[i])));
-    const f = (a, b) => X(u + a * h, v + b * h);
-    const pu1 = f(1, 0), pu0 = f(-1, 0), pv1 = f(0, 1), pv0 = f(0, -1);
-    const ru = [0, 1, 2].map((i) => (pu1[i] - pu0[i]) / (2 * h));
-    const rv = [0, 1, 2].map((i) => (pv1[i] - pv0[i]) / (2 * h));
-    const ruu = [0, 1, 2].map((i) => (pu1[i] - 2 * p0[i] + pu0[i]) / (h * h));
-    const rvv = [0, 1, 2].map((i) => (pv1[i] - 2 * p0[i] + pv0[i]) / (h * h));
-    const a = f(1, 1), b = f(1, -1), cc = f(-1, 1), d = f(-1, -1);
-    const ruv = [0, 1, 2].map((i) => (a[i] - b[i] - cc[i] + d[i]) / (4 * h * h));
-    const nRaw = cross(ru, rv), len = Math.hypot(...nRaw), N = nRaw.map((value) => value / len);
-    const E = dot(ru, ru), F = dot(ru, rv), G = dot(rv, rv);
-    const e = dot(ruu, N), fm = dot(ruv, N), g = dot(rvv, N);
-    report.metricMax = Math.max(report.metricMax, Math.abs(E - 1), Math.abs(F), Math.abs(G - (u * u + c * c)) / G);
-    // Mean curvature (eG − 2fF + gE) / 2(EG − F²), relative to the principal scale √|K|.
-    const Hm = (e * G - 2 * fm * F + g * E) / (2 * (E * G - F * F));
-    const K = (e * g - fm * fm) / (E * G - F * F);
-    const Kf = gaussianCurvature(u, c);
-    report.harmonicMax = Math.max(report.harmonicMax, Math.abs(Hm) / Math.sqrt(Math.abs(Kf)));
-    report.kRelMax = Math.max(report.kRelMax, Math.abs(K - Kf) / Math.abs(Kf));
-    if (Kf >= 0) report.kNonNegative++;
-    report.normalMax = Math.max(report.normalMax, ...helicoidNormal(u, v, c).map((value, i) => Math.abs(value - N[i])));
-    // Ruling z = cv: three points at the same v are collinear and share z.
-    const q0 = X(-U, v), q1 = X(U, v), dq = [0, 1, 2].map((i) => q1[i] - q0[i]);
-    const dp = [0, 1, 2].map((i) => p0[i] - q0[i]);
-    report.rulingMax = Math.max(report.rulingMax, Math.hypot(...cross(dq, dp)) / Math.hypot(...dq), Math.abs(q0[2] - p0[2]), Math.abs(q1[2] - p0[2]));
-    // Screw: X(u, v + φ) = R_φ X(u, v) + (0, 0, cφ). Half-turn: R_π X(u, v) = X(−u, v).
-    const phi = TAU * random() - Math.PI, screw = rotateZ3(p0, phi), shifted = X(u, v + phi);
-    report.screwMax = Math.max(report.screwMax, Math.abs(screw[0] - shifted[0]), Math.abs(screw[1] - shifted[1]), Math.abs(screw[2] + c * phi - shifted[2]));
-    const half = rotateZ3(p0, Math.PI), mirrored = X(-u, v);
-    report.halfTurnMax = Math.max(report.halfTurnMax, ...half.map((value, i) => Math.abs(value - mirrored[i])));
+function auditMath() {
+  const meshes = [];
+  for (const [N, M, R, Hc] of [[3, 1, 1, 1], [4, 2, 1, 2.4], [6, 9, 0.7, 3.1], [16, 512, 1, 2.4], [32, 512, 2, 0.5], [32, 16, 1.3, 4], [7, 13, 1, 1]]) {
+    meshes.push(auditMesh(N, M, R, Hc));
   }
-  report.ok = report.formulaMax < 1e-9 && report.harmonicMax < 1e-4 && report.metricMax < 1e-5 &&
-    report.normalMax < 1e-5 && report.kRelMax < 1e-3 && report.kNonNegative === 0 && report.rulingMax < 1e-12 &&
-    report.screwMax < 1e-12 && report.halfTurnMax < 1e-12;
-  return report;
-}
-
-function auditGeometry() {
-  const random = seededRandom(20261111);
-  const presets = PRESETS.map((preset) => auditPreset({ ...PARAMS, ...preset.params }, random));
-  let nonFinite = 0, asymmetric = 0;
-  const vertices = helicoidMesh.vertices;
-  for (const vertex of vertices) {
-    const u = PARAMS.extent * (2 * vertex.x - 1), v = Math.PI * PARAMS.turns * (2 * vertex.y - 1);
-    if (![...helicoidPoint(u, v, PARAMS.pitch), ...helicoidNormal(u, v, PARAMS.pitch)].every(Number.isFinite)) nonFinite++;
+  const R = PARAMS.R, Hc = PARAMS.H;
+  const regimes = {};
+  for (const key of PRESET_KEYS) {
+    const sequence = [];
+    for (let n = 8; n <= 4096; n *= 2) sequence.push(areaRatio(n, PRESETS[key].m(n), R, Hc));
+    const limit = regimeLimit(key, R, Hc);
+    regimes[key] = {
+      limit,
+      last: sequence[sequence.length - 1],
+      steps: PRESETS[key].steps.map(([n, m]) => areaRatio(n, m, R, Hc)),
+      increasing: sequence.every((value, i) => i === 0 || value > sequence[i - 1]),
+    };
   }
-  // Half-turn maps lattice row j onto row rows − j: the s lattice must be symmetric about 1/2.
-  const rows = Math.round(PARAMS.rows);
-  for (let j = 0; j <= rows; j++) if (Math.abs(j / rows + (rows - j) / rows - 1) > 1e-12) asymmetric++;
-  return { presets, mesh: { vertices: vertices.length, faces: helicoidMesh.faces.length, nonFinite, asymmetric } };
+  regimes.A.ok = Math.abs(regimes.A.last - 1) < 1e-4;
+  regimes.B.ok = Math.abs(regimes.B.last - regimes.B.limit) < 1e-4;
+  regimes.C.ok = regimes.C.increasing && regimes.C.last > 100;
+  return { meshes, regimes, ok: meshes.every((m) => m.ok) && regimes.A.ok && regimes.B.ok && regimes.C.ok };
 }
 
 function auditTypography() {
   const graphics = hudPg;
-  const text = hudText();
-  const measure = (font, style, size, line) => {
-    setType(graphics, font, style, size);
-    return graphics.textWidth(line);
-  };
-  const title = Math.max(...text.title.map((line) => measure("Georgia", BOLD, 72, line)));
-  const column = Math.max(...text.column.map(([line, size]) => measure("monospace", NORMAL, size, line)));
-  const legend = 42 + Math.max(...text.legend.map(([, label, detail]) => Math.max(measure("monospace", NORMAL, 22, label), measure("monospace", NORMAL, 22, detail))));
-  const integral = measure("monospace", NORMAL, 23, text.integral);
-  const data = measure("monospace", NORMAL, 34, text.data);
-  const label = measure("monospace", NORMAL, 22, text.weierstrass);
-  const citation = measure("monospace", NORMAL, 22, text.citation) + 24 + measure("monospace", NORMAL, 22, text.citationRight);
-  const header = measure("monospace", NORMAL, 22, text.header) + 24 + measure("monospace", NORMAL, 22, text.headerRight);
+  const rows = [
+    ["Georgia", BOLD, 72, HUD_TEXT.title],
+    ["monospace", NORMAL, 34, HUD_TEXT.subtitle],
+    ["monospace", NORMAL, 23, HUD_TEXT.formula],
+    ["monospace", NORMAL, 26, HUD_TEXT.condition],
+    ["monospace", NORMAL, 22, HUD_TEXT.citation],
+  ];
+  const savedPreset = PARAMS.preset;
+  for (const key of PRESET_KEYS) {
+    PARAMS.preset = key;
+    for (const caption of OVERLAY.captions) rows.push(["monospace", NORMAL, 28, captionText(caption.first)], ["monospace", NORMAL, 28, captionText(caption.second)]);
+  }
+  PARAMS.preset = savedPreset;
+  let widest = 0;
+  for (const [font, style, size, text] of rows) {
+    graphics.textFont(font);
+    graphics.textStyle(style);
+    graphics.textSize(size);
+    widest = Math.max(widest, graphics.textWidth(text));
+  }
+  graphics.textFont("monospace");
+  graphics.textStyle(NORMAL);
+  graphics.textSize(26);
+  const left = HUD.stageTextX + graphics.textWidth(readoutText(3));
+  graphics.textSize(22);
+  const right = W - HUD.rightTextX - Math.max(...PRESET_KEYS.map((key) => graphics.textWidth(PRESETS[key].limit)));
+  // Data columns: widest label / value per side at the largest numbers the presets reach.
+  let leftColumn = 0, rightColumn = 0;
+  const rowsData = dataRows(32, 512);
+  for (const [list, side] of [[rowsData.left, "l"], [rowsData.right, "r"]]) {
+    for (const [label, value] of list) {
+      graphics.textSize(22);
+      let width = graphics.textWidth(label);
+      graphics.textSize(26);
+      width = Math.max(width, graphics.textWidth(value));
+      if (side === "l") leftColumn = Math.max(leftColumn, width);
+      else rightColumn = Math.max(rightColumn, width);
+    }
+  }
   return {
-    titleRight: Math.round(GRID.left + title),
-    columnLeft: gridX(7),
-    columnRight: Math.round(gridX(7) + column),
-    legendRight: Math.round(gridX(7) + legend),
-    lowerLeftRight: Math.round(GRID.left + Math.max(integral, data, label)),
-    citationWidth: Math.round(citation),
-    headerWidth: Math.round(header),
-    axisLabelWidth: Math.round(measure("monospace", NORMAL, 22, text.axis)),
-    available: GRID.right - GRID.left,
+    widestLine: Math.round(widest),
+    available: W - 2 * HUD.safeX,
+    stageGap: Math.round(right - left),
+    leftColumnEnd: Math.round(HUD.stageTextX + leftColumn),
+    rightColumnStart: Math.round(W - HUD.stageTextX - rightColumn),
   };
+}
+
+// Projected bbox of the lantern over the loop, against the HUD bands and the data columns.
+function auditFraming(R, Hc, typography) {
+  const saved = { R: PARAMS.R, H: PARAMS.H };
+  PARAMS.R = R;
+  PARAMS.H = Hc;
+  const k = fitScale(R, Hc);
+  const framing = { R, H: Hc, top: Infinity, bottom: -Infinity, left: Infinity, right: -Infinity, columnBandBottom: -Infinity };
+  const dataBottom = HUD.dataY + 4 * HUD.dataRow;
+  for (let frame = 0; frame < LOOP_FRAMES; frame += 6) {
+    computeFrameState(frame / LOOP_FRAMES);
+    const basis = cameraBasis(frameState.cam);
+    for (let i = 0; i <= 8; i++) {
+      for (let j = 0; j < 48; j++) {
+        const theta = TAU * j / 48;
+        const p = projectPoint(basis, toWorld([R * Math.cos(theta), R * Math.sin(theta), -Hc / 2 + Hc * i / 8], frameState.spin, k));
+        framing.top = Math.min(framing.top, Math.round(p[1]));
+        framing.bottom = Math.max(framing.bottom, Math.round(p[1]));
+        framing.left = Math.min(framing.left, Math.round(p[0]));
+        framing.right = Math.max(framing.right, Math.round(p[0]));
+      }
+    }
+  }
+  Object.assign(PARAMS, saved);
+  framing.clearsTrack = framing.top > HUD.trackY + 12;
+  framing.clearsChart = framing.bottom < CHART.headerY - 20;
+  framing.clearsColumns = framing.left > typography.leftColumnEnd + 12 && framing.right < typography.rightColumnStart - 12 ||
+    framing.top > dataBottom;
+  framing.clearsLoupe = framing.left > LOUPE.x + LOUPE.size / 2 + 12;
+  return framing;
 }
 
 function runAudit() {
   const t0 = performance.now();
-  const report = { geometry: auditGeometry(), typography: auditTypography(), framing: null, loop: null };
-  const framing = { top: Infinity, bottom: -Infinity, left: Infinity, right: -Infinity, labelTop: Infinity, labelRight: -Infinity };
-  const posed = [0, 0, 0], screen = [0, 0];
-  let previous = null, first = null, maxInteriorStep = 0;
-  // Symmetry-reduced pose: the rendered image depends on spin (and the plate diameter) only modulo π.
-  const snapshot = () => [
-    Math.cos(2 * frameState.spin), Math.sin(2 * frameState.spin), frameState.tilt, frameState.yaw,
-    frameState.levelVisible * frameState.level,
-    frameState.levelVisible * Math.cos(2 * frameState.rulingAngle),
-    frameState.levelVisible * Math.sin(2 * frameState.rulingAngle),
-  ];
-  const step = (p, q) => Math.max(...p.map((value, i) => Math.abs(value - q[i])));
-  for (let frame = 0; frame < LOOP_FRAMES; frame++) {
-    computeFrameState(frame / LOOP_FRAMES);
-    const current = snapshot();
-    if (previous) maxInteriorStep = Math.max(maxInteriorStep, step(current, previous));
-    else first = current;
-    previous = current;
-    if (frame % 6 !== 0) continue;
-    forEachExtremePoint(16, 128, (point, spun) => {
-      projectToScreen(posePoint(point, posed, spun), screen);
-      framing.top = Math.min(framing.top, Math.round(screen[1]));
-      framing.bottom = Math.max(framing.bottom, Math.round(screen[1]));
-      framing.left = Math.min(framing.left, Math.round(screen[0]));
-      framing.right = Math.max(framing.right, Math.round(screen[0]));
-    });
-    const anchor = axisLabelAnchor();
-    framing.labelTop = Math.min(framing.labelTop, Math.round(anchor[1] + AXIS_LABEL.dy - AXIS_LABEL.height));
-    framing.labelRight = Math.max(framing.labelRight, Math.round(anchor[0] + AXIS_LABEL.dx + report.typography.axisLabelWidth));
-  }
-  framing.clearsTop = framing.top > HUD.readoutY + 40 && framing.labelTop > HUD.readoutY + 32;
-  framing.clearsBottom = framing.bottom < HUD.ruleBottomY - 12;
-  framing.clearsRuler = framing.left > RULER.x + 24;
-  framing.clearsRight = framing.right <= GRID.right + 4 && framing.labelRight <= GRID.right;
-  report.framing = framing;
-  report.loop = {
-    frames: LOOP_FRAMES,
-    seconds: LOOP_FRAMES / FPS,
-    seamStep: step(first, previous),
-    maxInteriorStep,
-    auditMs: performance.now() - t0,
+  const typography = auditTypography();
+  const report = {
+    math: auditMath(),
+    typography,
+    framing: [[PARAMS.R, PARAMS.H], [0.5, 4], [2, 0.5], [2, 4], [1.2, 2.4]].map(([R, Hc]) => auditFraming(R, Hc, typography)),
+    loop: null,
   };
-  const ty = report.typography;
-  report.ok = report.geometry.presets.every((preset) => preset.ok) && report.geometry.mesh.nonFinite === 0 &&
-    report.geometry.mesh.asymmetric === 0 &&
-    framing.clearsTop && framing.clearsBottom && framing.clearsRuler && framing.clearsRight &&
-    ty.titleRight < ty.columnLeft - 24 && ty.columnRight <= GRID.right && ty.legendRight <= GRID.right &&
-    ty.lowerLeftRight < ty.columnLeft - 16 && ty.citationWidth <= ty.available && ty.headerWidth <= ty.available &&
-    report.loop.seamStep <= report.loop.maxInteriorStep * 1.01;
-  console.log("[helicoid audit]", JSON.stringify(report, null, 2));
+  const savedPreset = PARAMS.preset;
+  report.loop = {};
+  const snapshot = () => {
+    const fs = frameState;
+    // level is the visible state; the raw crossfade weight resets after every step by design.
+    return [Math.cos(fs.spin), Math.sin(fs.spin), fs.level / 4, fs.reveal, fs.surf, fs.wire, fs.ref, ...Object.values(fs.cam)];
+  };
+  const step = (p, q) => Math.max(...p.map((value, i) => Math.abs(value - q[i])));
+  for (const key of PRESET_KEYS) {
+    PARAMS.preset = key;
+    let previous = null, first = null, maxInteriorStep = 0, maxLevelJump = 0, lastLevel = 0;
+    for (let frame = 0; frame < LOOP_FRAMES; frame++) {
+      computeFrameState(frame / LOOP_FRAMES);
+      const current = snapshot();
+      if (previous) {
+        maxInteriorStep = Math.max(maxInteriorStep, step(current, previous));
+        maxLevelJump = Math.max(maxLevelJump, Math.abs(frameState.level - lastLevel));
+      } else first = current;
+      previous = current;
+      lastLevel = frameState.level;
+    }
+    report.loop[key] = { seamStep: step(first, previous), maxInteriorStep, maxLevelJump, firstLevel: first[2], lastLevel };
+  }
+  PARAMS.preset = savedPreset;
+  report.loop.frames = LOOP_FRAMES;
+  report.loop.seconds = LOOP_FRAMES / FPS;
+  report.auditMs = performance.now() - t0;
+  report.ok = report.math.ok &&
+    report.framing.every((f) => f.clearsTrack && f.clearsChart && f.clearsColumns && f.clearsLoupe) &&
+    typography.widestLine <= typography.available && typography.stageGap > 20 &&
+    PRESET_KEYS.every((key) => report.loop[key].seamStep <= report.loop[key].maxInteriorStep * 1.01 && report.loop[key].maxLevelJump < 0.5);
+  computeFrameState(loopProgress);
+  console.log("[lantern audit]", JSON.stringify(report, null, 2));
   return report;
 }
 
@@ -1015,48 +1292,46 @@ const previewParam = urlParam("preview");
 const previewProgress = previewParam === null ? NaN : Number(previewParam);
 const auditParam = urlParam("audit");
 
-// Turn-count presets; each retunes the pitch so the rise stays sculptural in the 9:16 stage.
-const PRESETS = [
-  { key: "turns1", params: { turns: 1, pitch: 0.16 } },
-  { key: "turns15", params: { turns: 1.5, pitch: 0.12 } },
-  { key: "turns25", params: { turns: 2.5, pitch: 0.075 } },
-];
-
-// ?preset=1&c=0.1&T=2&rows=96 — handy for stills and shader checks.
+// ?preset=B&mode=wire&r=1.2&h=3 — or ?n=12&m=200 for a fixed manual mesh.
 function applyUrlParams() {
-  const preset = Number(urlParam("preset")) - 1;
-  if (urlParam("preset") !== null && PRESETS[preset]) {
-    presetIndex = preset;
-    Object.assign(PARAMS, PRESETS[preset].params);
+  const mode = MODE_KEYS.indexOf(urlParam("mode"));
+  if (mode >= 0) {
+    modeIndex = mode;
+    PARAMS.mode = MODE_KEYS[mode];
   }
+  const preset = (urlParam("preset") || "").toUpperCase();
+  if (PRESET_KEYS.includes(preset)) PARAMS.preset = preset;
   const numeric = (name, key) => {
     const value = Number(urlParam(name));
     if (urlParam(name) !== null && Number.isFinite(value)) PARAMS[key] = value;
   };
-  numeric("c", "pitch");
-  numeric("T", "turns");
-  numeric("U", "extent");
-  numeric("rows", "rows");
-  numeric("helices", "helices");
-  numeric("rulings", "rulings");
-  numeric("divisions", "divisions");
-  numeric("tilt", "tilt");
+  numeric("r", "R");
+  numeric("h", "H");
   numeric("spin", "spinTurns");
-  if (urlParam("notes") === "0") sim.layers.notes = false;
+  numeric("light", "light");
+  if (urlParam("n") !== null || urlParam("m") !== null) {
+    numeric("n", "N");
+    numeric("m", "M");
+    PARAMS.preset = "manual";
+  }
+  if (urlParam("ref") === "1") PARAMS.reference = true;
+  if (urlParam("hook") === "0") OVERLAY.hook = false;
   sanitizeParams();
+  computeFrameState(0);
+  sim.surf = frameState.surf;
+  sim.wire = frameState.wire;
+  sim.ref = frameState.ref;
 }
 
 function sanitizeParams() {
-  PARAMS.pitch = clamp(PARAMS.pitch, 0.05, 0.2);
-  PARAMS.turns = clamp(Math.round(2 * PARAMS.turns) / 2, 1, 3);
-  PARAMS.extent = clamp(PARAMS.extent, 0.6, 1.4);
-  PARAMS.rows = clamp(Math.round(PARAMS.rows), LIMITS.minRows, LIMITS.maxRows);
-  PARAMS.helices = clamp(Math.round(PARAMS.helices), 3, 12);
-  PARAMS.rulings = clamp(Math.round(PARAMS.rulings / 6) * 6, 12, 48);
-  PARAMS.divisions = clamp(Math.round(PARAMS.divisions / 6) * 6, 6, 24);
-  PARAMS.tilt = clamp(PARAMS.tilt, 0.1, 0.8);
+  PARAMS.N = clamp(Math.round(PARAMS.N), LIMITS.minN, LIMITS.maxN);
+  // Triangle budget: T = 2NM ≤ maxTriangles.
+  const maxM = Math.min(LIMITS.maxM, Math.floor(LIMITS.maxTriangles / (2 * PARAMS.N)));
+  PARAMS.M = clamp(Math.round(PARAMS.M), LIMITS.minM, maxM);
+  PARAMS.R = clamp(PARAMS.R, LIMITS.minR, LIMITS.maxR);
+  PARAMS.H = clamp(PARAMS.H, LIMITS.minH, LIMITS.maxH);
   PARAMS.spinTurns = clamp(Math.round(PARAMS.spinTurns), -2, 2);
-  PARAMS.light = clamp(PARAMS.light, 0.4, 1.6);
+  PARAMS.light = clamp(PARAMS.light, 0.3, 1.8);
 }
 
 function getElement(id) {
@@ -1084,25 +1359,13 @@ function setLoop(progress) {
 }
 
 const SLIDERS = {
-  pitchSlider: ["pitch", (v) => `c = ${v.toFixed(3)}`],
-  turnsSlider: ["turns", (v) => `${turnsLabel(v)} turns`],
-  extentSlider: ["extent", (v) => `|u| ≤ ${v.toFixed(2)}`],
-  rowsSlider: ["rows", (v) => `${v.toFixed(0)} × ${(LIMITS.colsPerRow * v).toFixed(0)}`],
-  helixSlider: ["helices", (v) => `${(2 * v + 1).toFixed(0)} helices`],
-  rulingSlider: ["rulings", (v) => `${v.toFixed(0)} per turn`],
-  divisionSlider: ["divisions", (v) => `${v.toFixed(0)} × ${(360 / v).toFixed(0)}°`],
-  tiltSlider: ["tilt", (v) => `${(v * 180 / Math.PI).toFixed(0)}°`],
-  spinSlider: ["spinTurns", (v) => `${v.toFixed(0)} × π`],
+  nSlider: ["N", (v) => `${v.toFixed(0)}`],
+  mSlider: ["M", (v) => `${v.toFixed(0)}  (T = ${formatInt(2 * PARAMS.N * v)})`],
+  rSlider: ["R", (v) => v.toFixed(2)],
+  hSlider: ["H", (v) => v.toFixed(1)],
+  spinSlider: ["spinTurns", (v) => `${v.toFixed(0)} turn / loop`],
   lightSlider: ["light", (v) => v.toFixed(2)],
 };
-
-function applyParams() {
-  sanitizeParams();
-  rebuildMesh();
-  fitStage();
-  rebuildPlate();
-  syncControls();
-}
 
 function bindUI() {
   const startButton = getElement("startBtn");
@@ -1114,35 +1377,54 @@ function bindUI() {
     const element = getElement(id);
     if (!element) continue;
     element.oninput = () => {
+      if (key === "N" || key === "M") {
+        // Moving N or M fixes the mesh: the loop keeps turning but stops refining.
+        if (PARAMS.preset !== "manual") [PARAMS.N, PARAMS.M] = shownStep();
+        PARAMS.preset = "manual";
+      }
       PARAMS[key] = Number(element.value);
-      applyParams();
+      sanitizeParams();
+      syncMeshCache();
+      syncControls();
     };
   }
   const onClick = (id, handler) => {
     const element = getElement(id);
     if (element) element.onclick = handler;
   };
-  PRESETS.forEach((preset, index) => onClick(`preset-${preset.key}`, () => selectPreset(index)));
+  MODE_KEYS.forEach((mode, index) => onClick(`mode-${mode}`, () => selectMode(index)));
+  PRESET_KEYS.forEach((key) => onClick(`preset-${key}`, () => selectPreset(key)));
   onClick("pauseBtn", togglePause);
+  onClick("cameraBtn", resetCamera);
   onClick("resetBtn", resetSimulator);
-  for (const [id, layer] of Object.entries(TOGGLES)) {
+  const toggles = { showChart: "chart", showFacet: "facet", showMath: "math", showLoupe: "loupe" };
+  for (const [id, layer] of Object.entries(toggles)) {
     const element = getElement(id);
     if (element) element.onchange = () => {
       sim.layers[layer] = element.checked;
       syncControls();
     };
   }
+  const reference = getElement("showReference");
+  if (reference) reference.onchange = () => { PARAMS.reference = reference.checked; };
+  const hook = getElement("showHook");
+  if (hook) hook.onchange = () => { OVERLAY.hook = hook.checked; };
 }
 
-const TOGGLES = { showNet: "net", showContours: "contours", showPlate: "plate", showNotes: "notes", showMath: "math" };
 const DEFAULT_PARAMS = { ...PARAMS };
-const DEFAULT_PRESET = presetIndex;
 
-function selectPreset(index) {
+function selectMode(index) {
   if (isRecording) return;
-  presetIndex = index;
-  Object.assign(PARAMS, DEFAULT_PARAMS, PRESETS[index].params);
-  applyParams();
+  modeIndex = index;
+  PARAMS.mode = MODE_KEYS[index];
+  syncControls();
+}
+
+function selectPreset(key) {
+  if (isRecording) return;
+  PARAMS.preset = key;
+  syncMeshCache();
+  syncControls();
 }
 
 function togglePause() {
@@ -1151,35 +1433,54 @@ function togglePause() {
   syncControls();
 }
 
+function resetCamera() {
+  if (isRecording) return;
+  sim.dragYaw = 0;
+  sim.dragTilt = 0;
+}
+
 function resetSimulator() {
   if (isRecording) return;
   Object.assign(PARAMS, DEFAULT_PARAMS);
-  presetIndex = DEFAULT_PRESET;
+  syncMeshCache();
+  modeIndex = 0;
   Object.assign(sim, { paused: false, playhead: 0, dragYaw: 0, dragTilt: 0 });
   for (const layer of Object.keys(sim.layers)) sim.layers[layer] = true;
-  for (const id of Object.keys(TOGGLES)) {
+  OVERLAY.hook = true;
+  for (const id of ["showChart", "showFacet", "showHook", "showMath", "showLoupe"]) {
     const element = getElement(id);
     if (element) element.checked = true;
   }
-  applyParams();
+  const reference = getElement("showReference");
+  if (reference) reference.checked = false;
+  syncControls();
 }
 
 const CONTROL_IDS = [
   ...Object.keys(SLIDERS),
-  ...PRESETS.map((preset) => `preset-${preset.key}`),
-  "pauseBtn", "resetBtn", ...Object.keys(TOGGLES),
+  ...MODE_KEYS.map((mode) => `mode-${mode}`),
+  ...PRESET_KEYS.map((key) => `preset-${key}`),
+  "pauseBtn", "cameraBtn", "resetBtn", "showReference", "showChart", "showFacet", "showHook", "showMath", "showLoupe",
 ];
 
 function syncControls() {
   for (const [id, [key, format]] of Object.entries(SLIDERS)) {
     const element = getElement(id);
-    if (element) element.value = PARAMS[key];
+    if (element) {
+      if (id === "mSlider") element.max = Math.min(LIMITS.maxM, Math.floor(LIMITS.maxTriangles / (2 * PARAMS.N)));
+      element.value = PARAMS[key];
+    }
     setText(id.replace("Slider", "Value"), format(PARAMS[key]));
   }
-  PRESETS.forEach((preset, index) => {
-    const element = getElement(`preset-${preset.key}`);
-    if (element) element.style.borderColor = index === presetIndex ? "rgba(255,255,255,0.6)" : "";
+  MODE_KEYS.forEach((mode, index) => {
+    const element = getElement(`mode-${mode}`);
+    if (element) element.style.borderColor = index === modeIndex ? "rgba(255,255,255,0.6)" : "";
   });
+  PRESET_KEYS.forEach((key) => {
+    const element = getElement(`preset-${key}`);
+    if (element) element.style.borderColor = key === PARAMS.preset ? "rgba(255,255,255,0.6)" : "";
+  });
+  setText("presetValue", PARAMS.preset === "manual" ? "manual (N, M fixed)" : `${PRESETS[PARAMS.preset].law} · ${PRESETS[PARAMS.preset].limit}`);
   setText("pauseBtn", sim.paused ? "Play" : "Pause");
   const math = getElement("math");
   if (math) math.hidden = !sim.layers.math;
@@ -1188,12 +1489,39 @@ function syncControls() {
 
 function updateLiveUI() {
   if (frameCount % 6 !== 0 || !sim.layers.math) return;
-  const c = PARAMS.pitch, U = PARAMS.extent;
-  setText("pitchInfo", `c = ${c.toFixed(3)} · rise 2πc = ${(TAU * c).toFixed(3)} · ${turnsLabel(PARAMS.turns)} turns`);
-  setText("kValue", `${gaussianCurvature(0, c).toFixed(1)} … ${gaussianCurvature(U, c).toFixed(3)}`);
-  setText("levelValue", `${frameState.level.toFixed(3)} · v = ${(frameState.level / c).toFixed(2)}`);
-  setText("meshValue", `${helicoidMesh.vertices.length} verts · 1 surface draw call`);
+  const [N, M] = shownStep();
+  const R = PARAMS.R, Hc = PARAMS.H;
+  // The panel's cross-check sums the faces of the shown mesh in double precision.
+  const check = summedArea(N, M, R, Hc);
+  const analytic = lanternArea(N, M, R, Hc);
+  setText("areaValue", `A = ${analytic.toFixed(6)} (closed form)`);
+  setText("sumValue", `Σ faces = ${check.toFixed(6)} · Δ ${(Math.abs(check - analytic) / analytic).toExponential(1)}`);
+  setText("limitValue", `${presetLimit()} ⇒ A/2πRH → ${PARAMS.preset === "manual" ? "—" : formatLimit(regimeLimit(PARAMS.preset, R, Hc))}`);
+  setText("facetValue", `b ${facetBase(N, R).toFixed(4)} · h ${facetHeight(N, M, R, Hc).toFixed(5)} · h/b ${(facetHeight(N, M, R, Hc) / facetBase(N, R)).toFixed(4)}`);
+  setText("meshValue", `${meshCache.size} cached · ${formatInt(cachedTriangles())} triangles`);
   setText("costValue", sim.frameCost.toFixed(1));
+}
+
+function formatLimit(value) {
+  return Number.isFinite(value) ? value.toFixed(4) : "∞ (finite steps only)";
+}
+
+const areaSumCache = { key: "", value: 0 };
+
+function summedArea(N, M, R, Hc) {
+  const key = `${N}x${M}x${R}x${Hc}`;
+  if (areaSumCache.key !== key) {
+    const vertices = lanternVertices(N, M, R, Hc);
+    const faces = lanternFaces(N, M);
+    let area = 0;
+    for (let f = 0; f < faces.length; f += 3) {
+      const [a, b, c] = [faces[f], faces[f + 1], faces[f + 2]].map((i) => [vertices[3 * i], vertices[3 * i + 1], vertices[3 * i + 2]]);
+      area += Math.hypot(...cross(b.map((v, i) => v - a[i]), c.map((v, i) => v - a[i]))) / 2;
+    }
+    areaSumCache.key = key;
+    areaSumCache.value = area;
+  }
+  return areaSumCache.value;
 }
 
 function updateStaticUI() {
@@ -1234,7 +1562,7 @@ function draw() {
 function mouseDragged(event) {
   if (isRecording || !event || event.target !== canvasEl) return true;
   sim.dragYaw += movedX * 0.005;
-  sim.dragTilt = clamp(sim.dragTilt + movedY * 0.004, -0.6, 0.9);
+  sim.dragTilt = clamp(sim.dragTilt + movedY * 0.004, -0.9, 0.9);
   return false;
 }
 
@@ -1250,16 +1578,20 @@ function keyReleased() {
     return false;
   }
   if (key === "s" || key === "S") {
-    saveCanvas(`helicoid_${getTimestamp()}`, "png");
+    saveCanvas(`schwarz_lantern_${getTimestamp()}`, "png");
     return false;
   }
   if (key === "p" || key === "P") {
     togglePause();
     return false;
   }
+  if (key === "c" || key === "C") {
+    resetCamera();
+    return false;
+  }
   const digit = Number(key);
-  if (digit >= 1 && digit <= PRESETS.length) {
-    selectPreset(digit - 1);
+  if (digit >= 1 && digit <= MODE_KEYS.length) {
+    selectMode(digit - 1);
     return false;
   }
   return true;
@@ -1270,31 +1602,30 @@ function clamp(value, minValue, maxValue) {
 }
 
 // ================================================================
-// SCREEN FINISH — paper grain, corner guides and HUD composite
+// SCREEN FINISH — retained grain, corner guides and HUD composite
 // ================================================================
 
-// Dark specks at very low alpha: print grain on off-white paper.
 function bakeGrain() {
   grainPg.clear();
   grainPg.noStroke();
   randomSeed(20260904);
   const subtleCount = Math.floor(W * H * 0.0016);
   for (let i = 0; i < subtleCount; i++) {
-    const value = random(40, 110);
-    grainPg.fill(value, value, value, random(2, 6));
+    const value = random(110, 200);
+    grainPg.fill(value, value, value, random(2, 7));
     grainPg.circle(random(W), random(H), random(0.15, 0.85));
   }
-  const darkCount = Math.floor(W * H * 0.000035);
-  for (let i = 0; i < darkCount; i++) {
-    const value = random(10, 60);
-    grainPg.fill(value, value, value, random(8, 20));
+  const brightCount = Math.floor(W * H * 0.000035);
+  for (let i = 0; i < brightCount; i++) {
+    const value = random(210, 255);
+    grainPg.fill(value, value, value, random(12, 34));
     grainPg.circle(random(W), random(H), random(0.4, 1.2));
   }
 }
 
 function drawCornerGuides(graphics) {
   graphics.noFill();
-  graphics.stroke(INK.r, INK.g, INK.b, 110);
+  graphics.stroke(255, 255, 255, 80);
   graphics.strokeWeight(0.7);
   const margin = 34;
   const length = 24;
@@ -1316,6 +1647,11 @@ function compositeHUD(graphics) {
   ortho(-W / 2, W / 2, -H / 2, H / 2, -10, 10);
   noLights();
   blendMode(BLEND);
+  if (sim.layers.loupe && loupeFb) {
+    noStroke();
+    texture(loupeFb);
+    circle(LOUPE.x - W / 2, LOUPE.y - H / 2, LOUPE.size);
+  }
   image(graphics, -W / 2, -H / 2, W, H);
   drawingContext.enable(drawingContext.DEPTH_TEST);
   pop();
@@ -1389,7 +1725,7 @@ async function stopRecording() {
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = `helicoid_${getTimestamp()}.mp4`;
+    anchor.download = `schwarz_lantern_${getTimestamp()}.mp4`;
     anchor.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     setStatus("Saved", "#8f8");
@@ -1410,7 +1746,7 @@ async function stopRecording() {
 function captureFrame() {
   if (!encoder || encoder.state !== "configured") return;
   const timestamp = Math.round(recFrameCount * 1_000_000 / FPS);
-  // mp4-muxer rejects chunks without a duration; same frame duration as the series' capture.js.
+  // mp4-muxer rejects chunks without a duration (the seed's copy produced an empty MP4).
   const frame = new VideoFrame(canvasEl, { timestamp, duration: Math.round(1_000_000 / FPS) });
   encoder.encode(frame, { keyFrame: recFrameCount % FPS === 0 });
   frame.close();

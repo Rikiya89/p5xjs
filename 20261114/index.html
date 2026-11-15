@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>20261111 — Helicoid</title>
+  <title>20261114 — Schwarz Lantern</title>
   <script src="../p5.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mp4-muxer@5.1.3/build/mp4-muxer.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: #F2F0EA; overflow: hidden; font-family: ui-monospace, "Menlo", "Consolas", monospace; }
+    body { background: #000; overflow: hidden; font-family: ui-monospace, "Menlo", "Consolas", monospace; }
     canvas { display: block; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); max-width: 100vw; max-height: 100vh; width: auto; height: 100vh; object-fit: contain; }
     #controls { position: fixed; top: 18px; left: 18px; background: rgba(0,0,0,0.82); padding: 14px 16px; border-radius: 14px; color: #bbb; z-index: 100; border: 1px solid rgba(255,255,255,0.1); backdrop-filter: blur(14px); min-width: 320px; max-width: calc(100vw - 36px); max-height: calc(100vh - 36px); overflow-y: auto; }
     #controls strong { color: #fff; font-size: clamp(13px, 1.1vw + 9px, 15px); letter-spacing: 0.14em; }
@@ -30,11 +30,13 @@
     #toggles input { accent-color: #fff; margin-right: 5px; vertical-align: -1px; }
     #math { margin-top: 9px; line-height: 1.7; color: #777; }
     #math span { color: #ccc; }
+    #presetLine { margin: 6px 0 4px; color: #888; }
+    #presetLine span { color: #ccc; }
   </style>
 </head>
 <body>
   <div id="controls">
-    <div><strong>20261111 — HELICOID</strong></div>
+    <div><strong>20261114 — SCHWARZ LANTERN</strong></div>
     <button id="startBtn">Record</button>
     <button id="stopBtn" disabled>Stop</button>
     <div id="status">Ready</div>
@@ -43,40 +45,45 @@
       Duration: <span id="duration">0.0</span>s / <span id="maxDuration">10</span>s<br>
       Frames: <span id="frameCount">0</span> / <span id="maxFrames">—</span><br>
       Canvas: <span id="canvasSize">—</span><br>
-      Shortcut: <span>R</span> record · <span>S</span> still · <span>H</span> controls · <span>1–3</span> turns · <span>P</span> pause
+      Shortcut: <span>R</span> record · <span>S</span> still · <span>H</span> controls · <span>1–5</span> mode · <span>P</span> pause · drag orbit
     </div>
     <div id="sim">
-      <button id="preset-turns1">1 · T = 1</button>
-      <button id="preset-turns15">2 · T = 1.5</button>
-      <button id="preset-turns25">3 · T = 2.5</button>
-      <label class="slider">Pitch c <span id="pitchValue">—</span><input id="pitchSlider" type="range" min="0.05" max="0.2" step="0.005"></label>
-      <label class="slider">Turns T <span id="turnsValue">—</span><input id="turnsSlider" type="range" min="1" max="3" step="0.5"></label>
-      <label class="slider">Radial extent U <span id="extentValue">—</span><input id="extentSlider" type="range" min="0.6" max="1.4" step="0.01"></label>
-      <label class="slider">Mesh resolution <span id="rowsValue">—</span><input id="rowsSlider" type="range" min="48" max="160" step="1"></label>
-      <label class="slider">Helices (u = const) <span id="helixValue">—</span><input id="helixSlider" type="range" min="3" max="12" step="1"></label>
-      <label class="slider">Rulings (z = const) <span id="rulingValue">—</span><input id="rulingSlider" type="range" min="12" max="48" step="6"></label>
-      <label class="slider">Plate divisions <span id="divisionValue">—</span><input id="divisionSlider" type="range" min="6" max="24" step="6"></label>
-      <label class="slider">Camera elevation <span id="tiltValue">—</span><input id="tiltSlider" type="range" min="0.1" max="0.8" step="0.01"></label>
-      <label class="slider">Rotation <span id="spinValue">—</span><input id="spinSlider" type="range" min="-2" max="2" step="1"></label>
-      <label class="slider">Light intensity <span id="lightValue">—</span><input id="lightSlider" type="range" min="0.4" max="1.6" step="0.01"></label>
+      <button id="preset-A" title="M = N/2 · M/N² → 0">A · Converge</button>
+      <button id="preset-B" title="M = N²/2 · M/N² → 1/2">B · Finite</button>
+      <button id="preset-C" title="M = N³/8 · M/N² → ∞">C · Diverge</button>
+      <div id="presetLine">Preset: <span id="presetValue">—</span></div>
+      <button id="mode-auto">1 · Auto</button>
+      <button id="mode-hybrid">2 · Hybrid</button>
+      <button id="mode-solid">3 · Solid</button>
+      <button id="mode-wire">4 · Wire</button>
+      <button id="mode-compare">5 · Compare</button>
+      <label class="slider">Angular segments N <span id="nValue">—</span><input id="nSlider" type="range" min="3" max="96" step="1"></label>
+      <label class="slider">Vertical layers M <span id="mValue">—</span><input id="mSlider" type="range" min="1" max="2048" step="1"></label>
+      <label class="slider">Radius R <span id="rValue">—</span><input id="rSlider" type="range" min="0.5" max="2" step="0.05"></label>
+      <label class="slider">Height H <span id="hValue">—</span><input id="hSlider" type="range" min="0.5" max="4" step="0.1"></label>
+      <label class="slider">Rotation speed <span id="spinValue">—</span><input id="spinSlider" type="range" min="-2" max="2" step="1"></label>
+      <label class="slider">Light intensity <span id="lightValue">—</span><input id="lightSlider" type="range" min="0.3" max="1.8" step="0.01"></label>
       <button id="pauseBtn">Pause</button>
+      <button id="cameraBtn" title="Shortcut: C">Reset camera</button>
       <button id="resetBtn">Reset</button>
       <div id="toggles">
-        <label><input id="showNet" type="checkbox" checked>Helices</label>
-        <label><input id="showContours" type="checkbox" checked>Rulings</label>
-        <label><input id="showPlate" type="checkbox" checked>Sacred plate</label>
-        <label><input id="showNotes" type="checkbox" checked>Annotations</label>
+        <label><input id="showReference" type="checkbox">Cylinder</label>
+        <label><input id="showChart" type="checkbox" checked>Area chart</label>
+        <label><input id="showFacet" type="checkbox" checked>Facet b × h</label>
+        <label><input id="showHook" type="checkbox" checked>Hook text</label>
         <label><input id="showMath" type="checkbox" checked>Math info</label>
+        <label><input id="showLoupe" type="checkbox" checked>Loupe</label>
       </div>
       <div id="math">
-        <span id="pitchInfo">—</span><br>
-        K range: <span id="kValue">—</span><br>
-        Screw phase z: <span id="levelValue">—</span><br>
+        <span id="areaValue">—</span><br>
+        <span id="sumValue">—</span><br>
+        <span id="limitValue">—</span><br>
+        Facet <span id="facetValue">—</span><br>
         <span id="meshValue">—</span><br>
         Frame cost: <span id="costValue">—</span> ms
       </div>
     </div>
   </div>
-  <script src="sketch.js?v=20261111-helicoid-a"></script>
+  <script src="sketch.js?v=20261114-lantern-d"></script>
 </body>
 </html>
